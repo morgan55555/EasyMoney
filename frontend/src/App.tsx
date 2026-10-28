@@ -11,12 +11,14 @@
  *  - RequireAdmin    — the /admin route is only reachable for is_admin users.
  */
 
+import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 
 import { getTokens } from './api/client'
 import { Layout } from './components/Layout'
 import { VerifyEmailGate } from './components/VerifyEmailGate'
 import { Spinner } from './components/ui'
+import { useI18n } from './i18n'
 import { useMe } from './query/queries'
 import { AuthPage } from './pages/AuthPage'
 import { AdminPage } from './pages/AdminPage'
@@ -63,6 +65,23 @@ function FullScreenSpinner() {
   )
 }
 
+/**
+ * Inside the app the UI language is exactly the user's `preferred_language`
+ * (§2.13): once /me resolves, adopt it for this session. `applyPreferred`
+ * never writes to localStorage, so the stored public-page choice (used on
+ * login/register) is not clobbered, and switching accounts re-applies the
+ * new user's preference.
+ */
+function PreferredLanguageSync() {
+  const me = useMe()
+  const { applyPreferred } = useI18n()
+  const preferred = me.data?.preferred_language
+  useEffect(() => {
+    if (preferred) applyPreferred(preferred)
+  }, [preferred, applyPreferred])
+  return null
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -91,6 +110,7 @@ export default function App() {
           element={
             <RequireAuth>
               <RequireVerified>
+                <PreferredLanguageSync />
                 <Layout />
               </RequireVerified>
             </RequireAuth>

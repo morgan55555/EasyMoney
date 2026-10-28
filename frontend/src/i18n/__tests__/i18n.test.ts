@@ -1,19 +1,23 @@
 /**
  * AGENTS.md §2.13 / req 27: UI language vs. preferred language.
  *
- * Pins the resolution order the provider implements: a stored manual choice
- * wins, else the server's `preferred_language` (adopted by `applyPreferred`
- * *without* marking manual, so a later manual choice still wins), else `en`.
- * `setLang` (the header switcher) always marks the choice manual and never
- * touches the server's `preferred_language`. Also covers Russian plural forms
- * (`Intl.PluralRules`) and `{{param}}` interpolation.
+ * Pins the provider semantics:
+ *  - `browserLang` maps a BCP-47 tag to a UI language (pure, unit-tested);
+ *  - initial language on load: stored choice → else browser language → else 'en';
+ *  - `setLang` (the public-page selector) sets the state AND persists it
+ *    (plain `'en'`/`'ru'` under `easymoney.lang`);
+ *  - `applyPreferred` (server-driven from `me.preferred_language` inside the
+ *    app) updates the state only — it never writes to localStorage and always
+ *    wins over the stored choice, so every account's preference takes effect.
+ * Also covers Russian plural forms (`Intl.PluralRules`) and `{{param}}`
+ * interpolation.
  */
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { I18nProvider, pluralForm, useI18n, type I18nValue } from '../index'
+import { I18nProvider, pluralForm, browserLang, useI18n, type I18nValue } from '../index'
 import { ru } from '../locales'
 
 // React 18: tell the runtime we are in a test environment so `act` is allowed.
@@ -39,8 +43,13 @@ function renderProvider(): void {
   })
 }
 
+function setBrowserLang(tag: string): void {
+  Object.defineProperty(navigator, 'language', { value: tag, configurable: true })
+}
+
 beforeEach(() => {
   localStorage.removeItem(STORAGE_KEY)
+  delete (navigator as unknown as { language?: string }).language
 })
 
 afterEach(() => {
@@ -48,6 +57,25 @@ afterEach(() => {
   if (r) act(() => r.unmount())
   root = null
   captured = undefined
+  delete (navigator as unknown as { language?: string }).language
+})
+
+describe('browserLang', () => {
+  it('maps any Russian tag to ru', () => {
+    expect(browserLang('ru')).toBe('ru')
+    expect(browserLang('ru-RU')).toBe('ru')
+    expect(browserLang('ru_KZ')).toBe('ru')
+    expect(browserLang('RU-ru')).toBe('ru')
+  })
+
+  it('maps everything else (incl. empty/undefined) to en', () => {
+    expect(browserLang('en')).toBe('en')
+    expect(browserLang('en-US')).toBe('en')
+    expect(browserLang('de-DE')).toBe('en')
+    expect(browserLang('')).toBe('en')
+    expect(browserLang(undefined)).toBe('en')
+    expect(browserLang(null)).toBe('en')
+  })
 })
 
 describe('pluralForm', () => {
@@ -77,73 +105,97 @@ describe('pluralForm', () => {
   })
 })
 
-describe('I18nProvider: manual vs. preferred', () => {
-  it('defaults to EN when nothing is stored', () => {
+describe('I18nProvider: initial language', () => {
+  it('uses the browser language when nothing is stored (ru browser)', () => {
+    setBrowserLang('ru-RU')
+    renderProvider()
+    expect(captured?.lang).toBe('ru')
+    expect(captured?.locale).toBe('ru-RU')
+    expect(captured?.t('lang.ru')).toBe(ru['lang.ru'])
+  })
+
+  it('uses the browser language when nothing is stored (en browser)', () => {
+    setBrowserLang('en-US')
     renderProvider()
     expect(captured?.lang).toBe('en')
-    expect(captured?.manual).toBe(false)
     expect(captured?.locale).toBe('en-US')
   })
 
-  it('treats a legacy bare stored value as a manual choice', () => {
-    localStorage.setItem(STORAGE_KEY, 'ru')
+  it('falls back to en when the browser tag is not Russian and nothing is stored', () => {
+    setBrowserLang('de-DE')
     renderProvider()
-    expect(captured?.lang).toBe('ru')
-    expect(captured?.manual).toBe(true)
-    expect(captured?.t('lang.ru')).toBe(ru['lang.ru'])
+    expect(captured?.lang).toBe('en')
   })
 
-  it('setLang marks the choice manual and persists it', () => {
+  it('a stored choice wins over the browser language', () => {
+    setBrowserLang('ru-RU')
+    localStorage.setItem(STORAGE_KEY, 'en')
+    renderProvider()
+    expect(captured?.lang).toBe('en')
+  })
+
+  it('still parses the legacy JSON storage format', () => {
+    setBrowserLang('en-US')
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ lang: 'ru', manual: true }))
+    renderProvider()
+    expect(captured?.lang).toBe('ru')
+  })
+
+  it('corrupt storage falls back to the browser language', () => {
+    setBrowserLang('ru-RU')
+    localStorage.setItem(STORAGE_KEY, '{not json')
+    renderProvider()
+    expect(captured?.lang).toBe('ru')
+  })
+})
+
+describe('I18nProvider: setLang vs. applyPreferred', () => {
+  it('setLang sets the state and persists the plain value', () => {
+    setBrowserLang('en-US')
     renderProvider()
     act(() => captured?.setLang('ru'))
     expect(captured?.lang).toBe('ru')
-    expect(captured?.manual).toBe(true)
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '')).toEqual({ lang: 'ru', manual: true })
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('ru')
   })
 
-  it('applyPreferred adopts the language without marking it manual', () => {
+  it('applyPreferred updates the state without touching storage', () => {
+    setBrowserLang('en-US')
     renderProvider()
     act(() => captured?.applyPreferred('ru'))
     expect(captured?.lang).toBe('ru')
-    expect(captured?.manual).toBe(false)
     expect(captured?.locale).toBe('ru-RU')
-    expect(captured?.t('lang.ru')).toBe(ru['lang.ru'])
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '')).toEqual({ lang: 'ru', manual: false })
-  })
-
-  it('applyPreferred never overwrites a manual choice', () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ lang: 'ru', manual: true }))
-    renderProvider()
-    act(() => captured?.applyPreferred('en'))
-    expect(captured?.lang).toBe('ru')
-    expect(captured?.manual).toBe(true)
-  })
-
-  it('applyPreferred with the current language is a no-op (no write)', () => {
-    renderProvider()
-    const before = captured
-    act(() => before?.applyPreferred('en'))
-    expect(captured).toBe(before)
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
   })
 
-  it('a manual choice made after applyPreferred wins over later applies', () => {
+  it('applyPreferred wins over a stored choice (per-account preference)', () => {
+    setBrowserLang('ru-RU')
+    localStorage.setItem(STORAGE_KEY, 'ru')
+    renderProvider()
+    act(() => captured?.applyPreferred('en'))
+    expect(captured?.lang).toBe('en')
+    // The stored public-page choice is left intact for the next visit.
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('ru')
+  })
+
+  it('setLang persists again after applyPreferred (no stale storage clobber)', () => {
+    setBrowserLang('en-US')
     renderProvider()
     act(() => captured?.applyPreferred('ru'))
     act(() => captured?.setLang('en'))
-    act(() => captured?.applyPreferred('ru'))
     expect(captured?.lang).toBe('en')
-    expect(captured?.manual).toBe(true)
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('en')
   })
 
   it('sets <html lang> and interpolates {{params}}', () => {
+    setBrowserLang('en-US')
     renderProvider()
-    act(() => captured?.setLang('ru'))
+    act(() => captured?.applyPreferred('ru'))
     expect(document.documentElement.lang).toBe('ru')
     expect(captured?.t('common.userById', { id: 7 })).toBe(ru['common.userById'].replace('{{id}}', '7'))
   })
 
   it('a missing key falls back to the key itself', () => {
+    setBrowserLang('en-US')
     renderProvider()
     expect(captured?.t('does.not.exist')).toBe('does.not.exist')
   })

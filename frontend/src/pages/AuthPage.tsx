@@ -37,7 +37,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const next = params.get('next')
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const authStatus = useAuthStatus()
   // While the status is still loading we optimistically assume it is open; a
   // closed register page shows a spinner until we know either way.
@@ -70,6 +70,9 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           email: values.email,
           password: values.password,
           display_name: values.display_name || undefined,
+          // The public-page language selector becomes the new user's
+          // preferred_language (§2.13).
+          preferred_language: lang,
         }),
       )
     } catch (e) {

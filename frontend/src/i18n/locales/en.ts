@@ -381,8 +381,13 @@ export const en: Dict = {
   'settings.emailError': 'Could not change the email',
 
   'settings.sectionAppearance': 'Appearance',
-  'settings.language': 'Email & default language',
-  'settings.languageHint': 'Used for your emails and as the default interface language.',
+  'settings.language': 'Language',
+  'settings.languageHint': 'Used for your emails and sets the interface language.',
+  'settings.passwordChange': 'Change password',
+  'settings.passwordHint': 'A confirmation link is sent to your email; the password changes when you open it.',
+  'settings.passwordChanged': 'Password changed.',
+  'settings.passwordConfirmSent': 'A confirmation link was sent to your email.',
+  'settings.passwordError': 'Could not change the password',
   'settings.theme': 'Theme',
   'settings.themeHint': 'Follow your system, or pin light or dark.',
 
@@ -394,10 +399,10 @@ export const en: Dict = {
   'verify.resendError': 'Could not resend the email',
 
   // --- Confirm email page (the link inside the email) ------------------------------------------
-  'confirm.title': 'Email confirmation',
+  'confirm.title': 'Confirmation',
   'confirm.working': 'Confirming…',
-  'confirm.success': 'Email confirmed',
-  'confirm.successText': 'Your email is confirmed. You can sign in and use EasyMoney.',
+  'confirm.success': 'Confirmed',
+  'confirm.successText': 'Your request was confirmed. You can sign in and use EasyMoney.',
   'confirm.openApp': 'Open EasyMoney',
   'confirm.backToLogin': 'Back to login',
   'confirm.failure': 'Confirmation failed',

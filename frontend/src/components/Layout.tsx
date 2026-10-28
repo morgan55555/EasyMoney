@@ -15,7 +15,6 @@ import { authApi } from '../api/endpoints'
 import { useI18n } from '../i18n'
 import { useMe, bindSocket } from '../query/queries'
 import { socket } from '../ws/socket'
-import { LanguageSwitcher } from './LanguageSwitcher'
 import { NotificationsBell } from './NotificationsBell'
 import { SettingsModal } from './SettingsModal'
 import { UserMenu } from './UserMenu'
@@ -92,7 +91,6 @@ export function Layout() {
             ) : null}
           </nav>
           <div className="ml-auto flex items-center gap-3">
-            <LanguageSwitcher />
             <NotificationsBell />
             <UserMenu me={me.data} onSettings={() => setSettingsOpen(true)} onLogout={() => void logout()} />
           </div>

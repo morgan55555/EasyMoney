@@ -382,8 +382,13 @@ export const ru: Dict = {
   'settings.emailError': 'Не удалось сменить email',
 
   'settings.sectionAppearance': 'Оформление',
-  'settings.language': 'Язык писем и по умолчанию',
-  'settings.languageHint': 'Используется для ваших писем и как язык интерфейса по умолчанию.',
+  'settings.language': 'Язык',
+  'settings.languageHint': 'Используется для ваших писем и задаёт язык интерфейса.',
+  'settings.passwordChange': 'Сменить пароль',
+  'settings.passwordHint': 'На ваш email придёт ссылка для подтверждения; пароль сменится после её открытия.',
+  'settings.passwordChanged': 'Пароль изменён.',
+  'settings.passwordConfirmSent': 'Ссылка для подтверждения отправлена на ваш email.',
+  'settings.passwordError': 'Не удалось сменить пароль',
   'settings.theme': 'Тема',
   'settings.themeHint': 'Как у системы, или фиксировать светлую/тёмную.',
 
@@ -395,10 +400,10 @@ export const ru: Dict = {
   'verify.resendError': 'Не удалось отправить письмо',
 
   // --- Страница подтверждения (ссылка в письме) ---------------------------------------------------------
-  'confirm.title': 'Подтверждение email',
+  'confirm.title': 'Подтверждение',
   'confirm.working': 'Подтверждаем…',
-  'confirm.success': 'Email подтверждён',
-  'confirm.successText': 'Ваш email подтверждён. Вы можете войти и пользоваться EasyMoney.',
+  'confirm.success': 'Подтверждено',
+  'confirm.successText': 'Ваш запрос подтверждён. Вы можете войти в EasyMoney и пользоваться им.',
   'confirm.openApp': 'Открыть EasyMoney',
   'confirm.backToLogin': 'К входу',
   'confirm.failure': 'Не удалось подтвердить',

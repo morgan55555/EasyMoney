@@ -1,18 +1,21 @@
 /**
  * Lightweight i18n (EN/RU): a context provider + a `t(key, params)` function
  * with `{{param}}` interpolation, plus Russian plural forms via
- * `Intl.PluralRules`. The choice is persisted in localStorage and applied to
- * <html lang>. Components call `useI18n()`; outside the provider (e.g. in
- * unit tests) the context defaults to English.
+ * `Intl.PluralRules`. Applied to <html lang>. Components call `useI18n()`;
+ * outside the provider (e.g. in unit tests) the context defaults to English.
  *
  * UI language vs. preferred language (AGENTS.md §2.13):
- *   - The **UI language** is a client preference (localStorage). The header
- *     switcher changes it via `setLang`, which marks the choice `manual`.
- *   - The user's **preferred_language** (a server-side profile field) is the
- *     *default*: when the user has made no manual choice, the app adopts the
- *     preferred language via `applyPreferred` (which never marks manual, so a
- *     later manual choice still wins). On load: manual choice → else
- *     preferred → else `en`.
+ *   - Inside the app the UI language is exactly the user's
+ *     **preferred_language** (a server-side profile field, edited in
+ *     settings). `PreferredLanguageSync` (in App.tsx) calls `applyPreferred`
+ *     with it; `applyPreferred` updates the state only and never writes to
+ *     localStorage, so switching accounts or users always takes effect.
+ *   - On the public pages (login / register / invite) the language selector
+ *     uses `setLang`, which persists the choice to localStorage. The stored
+ *     choice is used as the initial language on load and is passed to the
+ *     server as `preferred_language` when registering.
+ *   - Initial language on load: stored choice → else browser language
+ *     (`browserLang(navigator.language)`) → else `en`.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -43,6 +46,14 @@ export function pluralForm(locale: string, n: number, forms: PluralForms): strin
   return forms.other ?? forms.one
 }
 
+/**
+ * Map a BCP-47 language tag to the app's UI language. Pure (unit-testable):
+ * any Russian tag → 'ru', everything else (including empty/undefined) → 'en'.
+ */
+export function browserLang(tag: string | undefined | null): Lang {
+  return tag && tag.toLowerCase().startsWith('ru') ? 'ru' : 'en'
+}
+
 function interpolate(template: string, params?: Record<string, string | number>): string {
   if (!params) return template
   return template.replace(/\{\{(\w+)\}\}/g, (match, name: string) =>
@@ -59,91 +70,79 @@ export interface I18nValue {
   /** BCP-47 tag for Intl formatting: 'en-US' | 'ru-RU'. */
   locale: string
   t: TFunc
-  /** Whether the user has made an explicit UI-language choice (switcher). */
-  manual: boolean
-  /** User action: set the UI language and remember it as a manual choice. */
+  /** Persisted user action (public pages): set the UI language and store it. */
   setLang: (lang: Lang) => void
-  /** Server default: adopt a language without marking it manual (idempotent). */
+  /** Server-driven: adopt a language for this session without persisting. */
   applyPreferred: (lang: Lang) => void
 }
 
 const STORAGE_KEY = 'easymoney.lang'
 
-interface StoredLang {
-  lang: Lang
-  manual: boolean
-}
-
-function readStored(): StoredLang {
+/**
+ * Read the stored UI-language choice (plain `'en'` / `'ru'`; the legacy
+ * `{"lang": …, "manual": …}` JSON is still parsed). `null` when nothing is
+ * stored — the initial language then falls back to the browser language.
+ */
+function readStored(): Lang | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      if (raw === 'en' || raw === 'ru') {
-        // Legacy value (written before the manual flag existed) — a stored
-        // value means the user chose it, so treat it as manual.
-        return { lang: raw, manual: true }
-      }
-      const parsed = JSON.parse(raw) as Partial<StoredLang>
-      if (parsed.lang === 'en' || parsed.lang === 'ru') {
-        return { lang: parsed.lang, manual: parsed.manual === true }
-      }
-    }
+    if (!raw) return null
+    if (raw === 'en' || raw === 'ru') return raw
+    const parsed = JSON.parse(raw) as { lang?: unknown }
+    if (parsed && (parsed.lang === 'en' || parsed.lang === 'ru')) return parsed.lang
   } catch {
-    // localStorage unavailable (private mode / tests) — fall through.
+    // localStorage unavailable or corrupt — fall through.
   }
-  return { lang: 'en', manual: false }
+  return null
 }
 
-function persist(stored: StoredLang): void {
+function persist(lang: Lang): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
+    localStorage.setItem(STORAGE_KEY, lang)
   } catch {
     // Non-fatal: the choice just won't persist.
   }
+}
+
+function initialLang(): Lang {
+  return readStored() ?? browserLang(typeof navigator !== 'undefined' ? navigator.language : undefined)
 }
 
 const defaultValue: I18nValue = {
   lang: 'en',
   locale: 'en-US',
   t: makeT(en),
-  manual: false,
   setLang: () => {},
   applyPreferred: () => {},
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<StoredLang>(readStored)
+  const [lang, setLangState] = useState<Lang>(initialLang)
 
-  const setLang = useCallback((lang: Lang) => {
-    const next: StoredLang = { lang, manual: true }
+  const setLang = useCallback((next: Lang) => {
     persist(next)
-    setState(next)
+    setLangState(next)
   }, [])
 
-  const applyPreferred = useCallback((lang: Lang) => {
-    setState((prev) => {
-      // Never overwrite a manual choice; skip the write when unchanged.
-      if (prev.manual || prev.lang === lang) return prev
-      const next: StoredLang = { lang, manual: false }
-      persist(next)
-      return next
-    })
+  // Server-driven change: state only, never persisted (the profile is the
+  // source of truth, and each account may prefer a different language).
+  const applyPreferred = useCallback((next: Lang) => {
+    setLangState(next)
   }, [])
 
   useEffect(() => {
-    document.documentElement.lang = state.lang
-  }, [state.lang])
+    document.documentElement.lang = lang
+  }, [lang])
 
   const value = useMemo<I18nValue>(
     () => ({
-      lang: state.lang,
-      locale: state.lang === 'ru' ? 'ru-RU' : 'en-US',
-      t: makeT(state.lang === 'ru' ? ru : en),
-      manual: state.manual,
+      lang,
+      locale: lang === 'ru' ? 'ru-RU' : 'en-US',
+      t: makeT(lang === 'ru' ? ru : en),
       setLang,
       applyPreferred,
     }),
-    [state.lang, state.manual, setLang, applyPreferred],
+    [lang, setLang, applyPreferred],
   )
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>

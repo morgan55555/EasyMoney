@@ -15,6 +15,8 @@ export interface RegisterRequest {
   email: string
   password: string
   display_name?: string
+  /** UI language chosen on the login page (§2.13); 'en' when not sent. */
+  preferred_language?: 'en' | 'ru'
 }
 
 export interface LoginRequest {
@@ -31,7 +33,7 @@ export interface UserOut {
   created_at: string
   is_admin: boolean
   email_verified: boolean
-  preferred_language: string
+  preferred_language: 'en' | 'ru'
   /** Short avatar URL or null (image served by GET /users/{id}/avatar). */
   avatar_url: string | null
 }
@@ -58,6 +60,12 @@ export interface AuthStatusOut {
 /** POST /me/email/change response. */
 export interface EmailChangeResponse {
   /** "changed" (applied) or "confirmation_sent" (awaiting the old address). */
+  status: 'changed' | 'confirmation_sent'
+}
+
+/** POST /me/password/change response. */
+export interface PasswordChangeResponse {
+  /** "changed" (applied) or "confirmation_sent" (awaiting the link). */
   status: 'changed' | 'confirmation_sent'
 }
 

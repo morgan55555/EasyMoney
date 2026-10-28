@@ -27,6 +27,7 @@ import type {
   MemberOut,
   NotificationListOut,
   ParticipantIn,
+  PasswordChangeResponse,
   RegisterRequest,
   SettlementOut,
   TokenResponse,
@@ -57,6 +58,8 @@ export const meApi = {
     apiFetch<UserOut>('/api/me', { method: 'PATCH', body: JSON.stringify(body) }),
   changeEmail: (new_email: string) =>
     apiFetch<EmailChangeResponse>('/api/me/email/change', { method: 'POST', body: JSON.stringify({ new_email }) }),
+  changePassword: (new_password: string) =>
+    apiFetch<PasswordChangeResponse>('/api/me/password/change', { method: 'POST', body: JSON.stringify({ new_password }) }),
   setAvatar: (file: File) => {
     const form = new FormData()
     form.append('file', file)

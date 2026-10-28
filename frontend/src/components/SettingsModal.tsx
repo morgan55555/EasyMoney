@@ -1,20 +1,21 @@
 /**
  * Settings modal (AGENTS.md §2.13, §3.6): change display name, avatar
- * (upload / clear), email (with the confirm-to-old-address flow), preferred
- * language (the only place it is changed server-side) and the UI theme
- * (a client-only preference, separate from preferred language).
+ * (upload / clear), email (with the confirm-to-old-address flow), password
+ * (with the confirmation-link flow), preferred language (the only place it
+ * is changed server-side) and the UI theme (a client-only preference,
+ * separate from preferred language).
  *
  * Name / language save through PATCH /me; email through POST /me/email/change
- * (which returns "changed" or "confirmation_sent"); avatar through the
- * multipart /me/avatar endpoints. Theme uses the ThemeManager context and is
- * never sent to the server.
+ * and password through POST /me/password/change (each returns "changed" or
+ * "confirmation_sent"); avatar through the multipart /me/avatar endpoints.
+ * Theme uses the ThemeManager context and is never sent to the server.
  */
 
 import { useEffect, useRef, useState } from 'react'
 
 import { ApiError } from '../api/client'
 import { useI18n } from '../i18n'
-import { useClearAvatar, useChangeEmail, usePatchMe, useSetAvatar, useMe } from '../query/queries'
+import { useChangePassword, useClearAvatar, useChangeEmail, usePatchMe, useSetAvatar, useMe } from '../query/queries'
 import { useTheme, type Theme } from '../lib/theme'
 import { Avatar } from './Avatar'
 import { Button, ErrorText, Field, Modal, Select, TextInput } from './ui'
@@ -28,6 +29,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
 
   const patchMe = usePatchMe()
   const changeEmail = useChangeEmail()
+  const changePassword = useChangePassword()
   const setAvatar = useSetAvatar()
   const clearAvatar = useClearAvatar()
 
@@ -35,6 +37,8 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
   const [lang, setLang] = useState<'en' | 'ru'>('en')
   const [newEmail, setNewEmail] = useState('')
   const [emailMsg, setEmailMsg] = useState<EmailMsg>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [passwordMsg, setPasswordMsg] = useState<EmailMsg>(null)
   const [nameMsg, setNameMsg] = useState<EmailMsg>(null)
   const [avatarMsg, setAvatarMsg] = useState<EmailMsg>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -48,6 +52,8 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
     }
     setNewEmail('')
     setEmailMsg(null)
+    setNewPassword('')
+    setPasswordMsg(null)
     setNameMsg(null)
     setAvatarMsg(null)
   }, [open])
@@ -98,6 +104,23 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           ),
         onError: (e) =>
           setEmailMsg({ kind: 'error', text: e instanceof ApiError ? e.message : t('settings.emailError') }),
+      },
+    )
+  }
+
+  const submitPassword = () => {
+    if (newPassword.length < 8) return
+    changePassword.mutate(
+      newPassword,
+      {
+        onSuccess: (res) =>
+          setPasswordMsg(
+            res.status === 'changed'
+              ? { kind: 'success', text: t('settings.passwordChanged') }
+              : { kind: 'info', text: t('settings.passwordConfirmSent') },
+          ),
+        onError: (e) =>
+          setPasswordMsg({ kind: 'error', text: e instanceof ApiError ? e.message : t('settings.passwordError') }),
       },
     )
   }
@@ -208,6 +231,32 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             </p>
           ) : null}
           <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.emailHint')}</p>
+          <Field label={t('settings.passwordChange')} hint={t('settings.passwordHint')}>
+            <TextInput
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submitPassword()
+              }}
+            />
+          </Field>
+          <Button onClick={submitPassword} busy={changePassword.isPending} disabled={newPassword.length < 8}>
+            {t('settings.passwordChange')}
+          </Button>
+          {passwordMsg ? (
+            <p
+              className={`text-sm ${
+                passwordMsg.kind === 'error'
+                  ? 'text-red-600 dark:text-red-400'
+                  : passwordMsg.kind === 'info'
+                    ? 'text-amber-700 dark:text-amber-400'
+                    : 'text-emerald-700 dark:text-emerald-400'
+              }`}
+            >
+              {passwordMsg.text}
+            </p>
+          ) : null}
         </section>
 
         {/* Appearance --------------------------------------------------------- */}

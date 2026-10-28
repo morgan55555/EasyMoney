@@ -444,6 +444,14 @@ export function useChangeEmail() {
   })
 }
 
+export function useChangePassword() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (new_password: string) => api.meApi.changePassword(new_password),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.me }),
+  })
+}
+
 export function useSetAvatar() {
   const qc = useQueryClient()
   return useMutation({
