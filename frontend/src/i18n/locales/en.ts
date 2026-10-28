@@ -374,10 +374,11 @@ export const en: Dict = {
   'settings.sectionAccount': 'Account',
   'settings.email': 'Email',
   'settings.emailChange': 'Change email',
-  'settings.emailHint': 'A confirmation is sent to your current address before the change is applied.',
+  'settings.emailHint':
+    'A confirmation is sent to your new address, and a “this wasn’t me” link to your current address.',
   'settings.emailChanged': 'Email changed.',
   'settings.emailConfirmSent':
-    'Confirmation sent to your current address. Check your inbox to finish the change.',
+    'Two emails were sent: a confirmation to your new address and a “this wasn’t me” link to your current one. Open the confirmation to finish the change.',
   'settings.emailError': 'Could not change the email',
 
   'settings.sectionAppearance': 'Appearance',
@@ -407,6 +408,16 @@ export const en: Dict = {
   'confirm.backToLogin': 'Back to login',
   'confirm.failure': 'Confirmation failed',
   'confirm.failureText': 'This link is invalid or has expired.',
+
+  // --- Revert email page (the “this wasn’t me” link) ---------------------------------------------
+  'revert.title': 'Email change',
+  'revert.working': 'Reverting…',
+  'revert.success': 'Change reverted',
+  'revert.successText': 'The email change was reverted. You can sign in with your previous address.',
+  'revert.openApp': 'Open EasyMoney',
+  'revert.backToLogin': 'Back to login',
+  'revert.failure': 'Revert failed',
+  'revert.failureText': 'This link is invalid, already used, or has expired.',
 
   // --- Admin panel -----------------------------------------------------------------------------
   'admin.title': 'Admin',

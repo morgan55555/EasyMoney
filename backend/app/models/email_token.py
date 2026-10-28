@@ -1,7 +1,7 @@
-"""Email confirmation tokens: registration, email-change and password-change
-(AGENTS.md §2.13).
+"""Email confirmation tokens: registration, email-change, email-change revert
+and password-change (AGENTS.md §2.13).
 
-A single table serves all three confirmation flows, distinguished by
+A single table serves all four confirmation flows, distinguished by
 ``purpose``. Tokens are 128-bit URL-safe secrets. A token is valid while
 ``status`` is ``"pending"`` and unexpired; confirming marks it ``used``.
 Reissuing (resend / a new change request) revokes the previous ``pending``
@@ -26,6 +26,10 @@ if TYPE_CHECKING:
 PURPOSE_REGISTER = "register"
 PURPOSE_CHANGE = "change"
 PURPOSE_PASSWORD = "password"
+# "revert": the "this wasn't me" token mailed to the previous address when an
+# email change is requested. It cancels the pending change (or switches the
+# email back) within the ``EMAIL_CHANGE_REVERT_DAYS`` window.
+PURPOSE_REVERT = "revert"
 
 # --- status values ---
 STATUS_PENDING = "pending"
@@ -42,11 +46,14 @@ class EmailToken(BaseModel):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
-    # "register" | "change" | "password" (see the PURPOSE_* constants above).
+    # "register" | "change" | "password" | "revert" (see the PURPOSE_*
+    # constants above).
     purpose: Mapped[str] = mapped_column(String(8), nullable=False)
     # URL-safe 128-bit token, unique.
     token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    # The address the link is sent to; for "change", the new (target) email.
+    # The address the link is mailed to: for "register"/"password" the user's
+    # current email, for "change" the NEW (target) email, and for "revert" the
+    # PREVIOUS email (the address to switch back to).
     target_email: Mapped[str] = mapped_column(String(320), nullable=False)
     # "pending" | "used" | "revoked".
     status: Mapped[str] = mapped_column(String(8), nullable=False, default=STATUS_PENDING)

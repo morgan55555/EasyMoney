@@ -56,6 +56,10 @@ services:
       EMAIL_REGISTER_CONFIRMATION: ${EMAIL_REGISTER_CONFIRMATION:-false}
       EMAIL_CHANGE_CONFIRMATION: ${EMAIL_CHANGE_CONFIRMATION:-false}
       PASSWORD_CHANGE_CONFIRMATION: ${PASSWORD_CHANGE_CONFIRMATION:-false}
+      # Confirmation link lifetime (hours); the email-change "this wasn't me"
+      # revert link lifetime (days).
+      CONFIRMATION_TOKEN_HOURS: ${CONFIRMATION_TOKEN_HOURS:-24}
+      EMAIL_CHANGE_REVERT_DAYS: ${EMAIL_CHANGE_REVERT_DAYS:-2}
       # When false, only the first user can register (then it is closed).
       REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
       # Max raw size (MB) of a user avatar upload.

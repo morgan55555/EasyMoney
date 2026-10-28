@@ -29,6 +29,7 @@ from app.models.email_token import (
     PURPOSE_CHANGE,
     PURPOSE_PASSWORD,
     PURPOSE_REGISTER,
+    PURPOSE_REVERT,
     STATUS_PENDING,
     STATUS_REVOKED,
     STATUS_USED,
@@ -133,17 +134,23 @@ async def _issue_confirmation_token(
     user: User,
     purpose: str,
     target_email: str,
+    *,
     password_hash: str | None = None,
+    ttl: timedelta | None = None,
+    new_email: str | None = None,
 ) -> EmailToken:
     """Create a pending token, revoke any previous pending one for the same
-    purpose, and mail the confirmation link.
+    purpose, and mail its link to ``target_email``.
 
-    The link is always mailed to the user's **current** email address: for
-    ``register`` that is the address being verified, and for ``change`` it is
-    the *previous* address (AGENTS.md §2.13, req 26) — the new address only
-    becomes the account's email once the token is confirmed. ``password``
-    tokens additionally carry ``password_hash`` (the pending new-password
-    hash), applied to the user only on confirmation.
+    The link is mailed to ``target_email``: for ``register``/``password`` that
+    is the user's current email; for ``change`` it is the NEW address (the
+    swap is applied only once that token is confirmed); for ``revert`` it is
+    the PREVIOUS address (the "this wasn't me" link, AGENTS.md §2.13).
+    ``password`` tokens additionally carry ``password_hash`` (the pending
+    new-password hash), applied to the user only on confirmation. ``ttl``
+    overrides the default ``confirmation_token_hours`` expiry (the revert
+    token uses the longer ``email_change_revert_days`` window); ``new_email``
+    is only used to render the revert notice.
     """
     # Revoke any existing pending token for this user + purpose.
     previous = await db.scalar(
@@ -156,20 +163,22 @@ async def _issue_confirmation_token(
     if previous is not None:
         previous.status = STATUS_REVOKED
 
+    if ttl is None:
+        ttl = timedelta(hours=get_settings().confirmation_token_hours)
     token = EmailToken(
         user_id=user.id,
         purpose=purpose,
         token=secrets.token_urlsafe(16),
         target_email=target_email,
         status=STATUS_PENDING,
-        expires_at=datetime.now(UTC) + timedelta(hours=24),
+        expires_at=datetime.now(UTC) + ttl,
         password_hash=password_hash,
     )
     db.add(token)
     await db.commit()
     await db.refresh(token)
 
-    # Mail the confirmation (best-effort: a mail failure must not block the
+    # Mail the link (best-effort: a mail failure must not block the
     # registration or any change flow).
     try:
         if purpose == PURPOSE_REGISTER:
@@ -180,11 +189,18 @@ async def _issue_confirmation_token(
             subject, text, html = mail_service.password_confirmation_message(
                 user.display_name, token.token, lang=user.preferred_language
             )
+        elif purpose == PURPOSE_REVERT:
+            subject, text, html = mail_service.change_revert_message(
+                user.display_name,
+                new_email or "",
+                token.token,
+                lang=user.preferred_language,
+            )
         else:
             subject, text, html = mail_service.change_confirmation_message(
                 user.display_name, target_email, token.token, lang=user.preferred_language
             )
-        await mail_service.send_mail(user.email, subject, text, html)
+        await mail_service.send_mail(target_email, subject, text, html)
     except Exception:
         logger.exception(
             "Failed to send confirmation email (user=%s, purpose=%s)", user.id, purpose
@@ -235,9 +251,9 @@ async def resend_confirmation(
 ) -> None:
     """Reissue and resend a confirmation token for the user.
 
-    For ``register``: re-mails to the user's current email.
-    For ``change``: re-mails to the **previous** (current) email with the
-    pending token's target.
+    For ``register``: re-mails the confirm link to the user's current email.
+    For ``change``: re-mails the confirm link to the pending token's target
+    (the new email).
     """
     if purpose == PURPOSE_REGISTER:
         await _issue_confirmation_token(db, user, PURPOSE_REGISTER, user.email)
@@ -265,9 +281,10 @@ async def resend_confirmation(
 async def change_email(db: AsyncSession, user: User, new_email: str) -> str:
     """Initiate an email change. Returns ``"changed"`` or ``"confirmation_sent"``.
 
-    - When change-confirmation is active: creates a token, mails the previous
-      address, and returns ``"confirmation_sent"`` (the new email is NOT yet
-      applied).
+    - When change-confirmation is active: issues a **confirm** token mailed to
+      the NEW address and a **revert** token mailed to the PREVIOUS address
+      (the "this wasn't me" link, valid for ``email_change_revert_days``), and
+      returns ``"confirmation_sent"`` (the new email is NOT yet applied).
     - When not active: applies immediately and returns ``"changed"``.
     """
     settings = get_settings()
@@ -281,13 +298,78 @@ async def change_email(db: AsyncSession, user: User, new_email: str) -> str:
         raise Conflict("An account with this email already exists")
 
     if settings.email_change_confirmation_active:
+        # Confirm link to the new address ...
         await _issue_confirmation_token(db, user, PURPOSE_CHANGE, new_norm)
+        # ... and a "this wasn't me" revert link to the previous address.
+        old_email = user.email
+        await _issue_confirmation_token(
+            db,
+            user,
+            PURPOSE_REVERT,
+            old_email,
+            ttl=timedelta(days=settings.email_change_revert_days),
+            new_email=new_norm,
+        )
         return "confirmation_sent"
 
     user.email = new_norm
     await db.commit()
     await db.refresh(user)
     return "changed"
+
+
+async def revert_email_change(db: AsyncSession, token_str: str) -> User:
+    """Apply a revert token ("this wasn't me", §2.13) and mark it used.
+
+    Only valid for a pending, unexpired ``revert`` token (within the
+    ``email_change_revert_days`` window). If the paired email change is still
+    pending it is cancelled (no email movement); if it was already confirmed
+    (the account email is the new address) the email is switched back to the
+    previous one.
+    """
+    row = await db.scalar(select(EmailToken).where(EmailToken.token == token_str))
+    if row is None or row.purpose != PURPOSE_REVERT:
+        raise NotFound("Revert token not found")
+    if row.status != STATUS_PENDING:
+        raise Conflict("Token has already been used or revoked")
+    if row.expires_at < datetime.now(UTC):
+        raise Conflict("Token has expired")
+
+    user = await db.get(User, row.user_id)
+    if user is None:
+        raise NotFound("User not found")
+
+    # The newest change token for this user is the one this revert refers to.
+    change_tok = await db.scalar(
+        select(EmailToken)
+        .where(EmailToken.user_id == user.id, EmailToken.purpose == PURPOSE_CHANGE)
+        .order_by(EmailToken.id.desc())
+        .limit(1)
+    )
+    if change_tok is None:
+        raise Conflict("No matching email change to revert")
+
+    old_email = row.target_email
+    if change_tok.status == STATUS_PENDING:
+        # Change not applied yet: cancel it. The account email is unchanged.
+        change_tok.status = STATUS_REVOKED
+    elif change_tok.target_email == user.email:
+        # Change confirmed and still the current email: switch back to the
+        # previous address.
+        taken = await db.scalar(
+            select(User.id).where(User.email == old_email, User.id != user.id)
+        )
+        if taken is not None:
+            raise Conflict("The previous email address is already in use")
+        user.email = old_email
+    else:
+        # The original change was superseded by a later one: nothing to revert.
+        raise Conflict("This email change is no longer active")
+
+    row.status = STATUS_USED
+    await db.commit()
+    await db.refresh(user)
+    return user
 
 
 async def change_password(db: AsyncSession, user: User, new_password: str) -> str:

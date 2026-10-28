@@ -6,6 +6,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.deps import get_db
 from app.core.security import get_current_user
 from app.models.user import User
@@ -23,6 +24,7 @@ router = APIRouter(prefix="/api", tags=["me"])
 
 
 def _user_out(user: User) -> UserOut:
+    settings = get_settings()
     return UserOut(
         id=user.id,
         email=user.email,
@@ -32,6 +34,8 @@ def _user_out(user: User) -> UserOut:
         email_verified=user.email_verified,
         preferred_language=user.preferred_language,
         avatar_url=avatar_url(user.id, user.avatar_data),
+        email_change_confirmation=settings.email_change_confirmation_active,
+        password_change_confirmation=settings.password_change_confirmation_active,
     )
 
 

@@ -13,6 +13,8 @@ from app.schemas.auth import (
     AuthStatusOut,
     EmailConfirmOut,
     EmailConfirmRequest,
+    EmailRevertOut,
+    EmailRevertRequest,
     LoginRequest,
     LogoutRequest,
     RefreshRequest,
@@ -65,6 +67,15 @@ async def email_confirm(
     """Apply a confirmation token (register or change)."""
     user = await auth_service.confirm_email_token(db, body.token)
     return EmailConfirmOut(email=user.email, email_verified=user.email_verified)
+
+
+@router.post("/email/revert", response_model=EmailRevertOut)
+async def email_revert(
+    body: EmailRevertRequest, db: AsyncSession = Depends(get_db)
+) -> EmailRevertOut:
+    """Apply a "this wasn't me" revert token for an email change (§2.13)."""
+    user = await auth_service.revert_email_change(db, body.token)
+    return EmailRevertOut(email=user.email)
 
 
 @router.post("/email/resend", status_code=204)

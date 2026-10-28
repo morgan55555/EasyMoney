@@ -112,14 +112,22 @@ _STRINGS: dict[str, dict[str, str]] = {
             "Please confirm your email address to activate your EasyMoney account:"
         ),
         "register_cta": "Confirm email",
-        # email-change confirmation
-        "change_subject": "Confirm your email change on EasyMoney",
+        # email-change confirmation (sent to the NEW address)
+        "change_subject": "Confirm your new email address on EasyMoney",
         "change_body": (
-            'We received a request to change the email for your EasyMoney account to '
-            "{new_email}. Click below to confirm. If you did not request this change, "
-            "you can ignore this email."
+            "Your EasyMoney account email is being changed to {new_email}. "
+            "Click below to confirm the change. If you did not make this "
+            "request, you can ignore this email."
         ),
-        "change_cta": "Confirm change",
+        "change_cta": "Confirm new email",
+        # email-change revert (sent to the PREVIOUS address)
+        "revert_subject": "Your email address was changed on EasyMoney",
+        "revert_body": (
+            "Your email address was changed to {new_email}. If you made this "
+            "change, you can ignore this email. If this wasn't you, click below "
+            "to revert it."
+        ),
+        "revert_cta": "This wasn't me",
         # password-change confirmation
         "password_subject": "Confirm your password change on EasyMoney",
         "password_body": (
@@ -165,14 +173,22 @@ _STRINGS: dict[str, dict[str, str]] = {
         "register_subject": "Подтвердите email в EasyMoney",
         "register_body": "Подтвердите адрес email, чтобы активировать аккаунт EasyMoney:",
         "register_cta": "Подтвердить email",
-        # email-change confirmation
-        "change_subject": "Подтвердите смену email в EasyMoney",
+        # email-change confirmation (sent to the NEW address)
+        "change_subject": "Подтвердите новый email в EasyMoney",
         "change_body": (
-            "Поступил запрос на смену email аккаунта EasyMoney на {new_email}. "
-            "Нажмите ниже, чтобы подтвердить. Если вы не запрашивали смену, "
-            "проигнорируйте это письмо."
+            "Email вашего аккаунта EasyMoney меняется на {new_email}. "
+            "Нажмите ниже, чтобы подтвердить смену. Если вы не запрашивали "
+            "смену, проигнорируйте это письмо."
         ),
-        "change_cta": "Подтвердить смену",
+        "change_cta": "Подтвердить новый email",
+        # email-change revert (sent to the PREVIOUS address)
+        "revert_subject": "Ваш email был изменён в EasyMoney",
+        "revert_body": (
+            "Ваш email был изменён на {new_email}. Если это сделали вы, "
+            "проигнорируйте это письмо. Если это были не вы, нажмите ниже, "
+            "чтобы отменить смену."
+        ),
+        "revert_cta": "Это не я",
         # password-change confirmation
         "password_subject": "Подтвердите смену пароля в EasyMoney",
         "password_body": (
@@ -296,6 +312,11 @@ def _group_url(group_id: int | None) -> str:
 def _confirm_url(token: str) -> str:
     """The email-confirmation page URL (frontend route)."""
     return f"{get_settings().frontend_url.rstrip('/')}/auth/email/confirm?token={token}"
+
+
+def _revert_url(token: str) -> str:
+    """The email-change revert ("this wasn't me") page URL (frontend route)."""
+    return f"{get_settings().frontend_url.rstrip('/')}/auth/email/revert?token={token}"
 
 
 # ---------------------------------------------------------------------------
@@ -565,8 +586,8 @@ def change_confirmation_message(
 ) -> tuple[str, str, str]:
     """Subject/text/html for the email-change confirmation (§2.13).
 
-    Sent to the **previous** address. The token links the user to the
-    confirm endpoint which applies the swap.
+    Sent to the **new** address. The token links the owner of that address to
+    the confirm endpoint, which applies the swap.
     """
     link = _confirm_url(token)
     subject = _t(lang, "change_subject")
@@ -581,6 +602,35 @@ def change_confirmation_message(
         _greeting(lang, user_name)
         + f'<p style="margin:0 0 8px;">{escape(body_text)}</p>'
         + _cta(link, _t(lang, "change_cta"))
+    )
+    return subject, text, _email_html(lang, body)
+
+
+def change_revert_message(
+    user_name: str,
+    new_email: str,
+    token: str,
+    lang: str = "en",
+) -> tuple[str, str, str]:
+    """Subject/text/html for the email-change revert notice (§2.13).
+
+    Sent to the **previous** address. The token links the owner of that address
+    to the revert endpoint, which cancels the pending change (or switches the
+    email back to this address) within the ``EMAIL_CHANGE_REVERT_DAYS`` window.
+    """
+    link = _revert_url(token)
+    subject = _t(lang, "revert_subject")
+    body_text = _t(lang, "revert_body").format(new_email=new_email)
+    text = (
+        f"{_t(lang, 'greeting').format(name=user_name)}\n\n"
+        + f"{body_text}\n"
+        + f"{link}\n\n"
+        + f"{_t(lang, 'signoff_plain')}"
+    )
+    body = (
+        _greeting(lang, user_name)
+        + f'<p style="margin:0 0 8px;">{escape(body_text)}</p>'
+        + _cta(link, _t(lang, "revert_cta"))
     )
     return subject, text, _email_html(lang, body)
 

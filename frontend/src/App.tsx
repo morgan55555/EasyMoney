@@ -23,6 +23,7 @@ import { useMe } from './query/queries'
 import { AuthPage } from './pages/AuthPage'
 import { AdminPage } from './pages/AdminPage'
 import { ConfirmEmailPage } from './pages/ConfirmEmailPage'
+import { RevertEmailPage } from './pages/RevertEmailPage'
 import { GroupsPage } from './pages/GroupsPage'
 import { GroupPage } from './pages/GroupPage'
 import { InvitePage } from './pages/InvitePage'
@@ -104,6 +105,7 @@ export default function App() {
         />
         <Route path="/invite/:token" element={<InvitePage />} />
         <Route path="/auth/email/confirm" element={<ConfirmEmailPage />} />
+        <Route path="/auth/email/revert" element={<RevertEmailPage />} />
 
         <Route
           path="/"

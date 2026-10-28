@@ -52,6 +52,7 @@ from app.models.email_token import (
     PURPOSE_CHANGE,
     PURPOSE_PASSWORD,
     PURPOSE_REGISTER,
+    PURPOSE_REVERT,
     STATUS_PENDING,
     STATUS_REVOKED,
     STATUS_USED,
@@ -310,21 +311,147 @@ async def _email_change_confirmation_active(
         assert user is not None
         status = await auth_service.change_email(db, user, "new@test.local")
     assert status == "confirmation_sent"
-    # The swap is NOT applied yet; a pending change token targets the new
-    # email and the mail went to the PREVIOUS address.
+    # The swap is NOT applied yet. Two tokens are issued: a pending "change"
+    # token targeting the NEW email and a pending "revert" token targeting the
+    # PREVIOUS email, and one mail goes to each address.
     assert (await _get_user(factory, 1)).email == "old@test.local"
-    tokens = await _tokens_for(factory, 1, PURPOSE_CHANGE)
-    assert len(tokens) == 1
-    assert tokens[0].status == STATUS_PENDING
-    assert tokens[0].target_email == "new@test.local"
-    assert len(sent) == 1
-    assert sent[0][0] == "old@test.local"
+    change_toks = await _tokens_for(factory, 1, PURPOSE_CHANGE)
+    revert_toks = await _tokens_for(factory, 1, PURPOSE_REVERT)
+    assert len(change_toks) == 1
+    assert change_toks[0].status == STATUS_PENDING
+    assert change_toks[0].target_email == "new@test.local"
+    assert len(revert_toks) == 1
+    assert revert_toks[0].status == STATUS_PENDING
+    assert revert_toks[0].target_email == "old@test.local"
+    assert len(sent) == 2
+    assert {m[0] for m in sent} == {"old@test.local", "new@test.local"}
 
-    # Confirming applies the swap and marks the token used.
+    # Confirming applies the swap and marks the change token used ...
     async with factory() as db:
-        await auth_service.confirm_email_token(db, tokens[0].token)
+        await auth_service.confirm_email_token(db, change_toks[0].token)
     assert (await _get_user(factory, 1)).email == "new@test.local"
     assert (await _tokens_for(factory, 1, PURPOSE_CHANGE))[0].status == STATUS_USED
+    # ... but the revert token stays pending (the "this wasn't me" window).
+    assert (await _tokens_for(factory, 1, PURPOSE_REVERT))[0].status == STATUS_PENDING
+
+
+async def _revert_cancels_pending_change(
+    factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    send, _ = _recorder()
+    monkeypatch.setattr(mail_service, "send_mail", send)
+    _env(
+        monkeypatch,
+        SMTP_ENABLED="true",
+        EMAIL_CHANGE_CONFIRMATION="true",
+        EMAIL_REGISTER_CONFIRMATION="false",
+    )
+    await _mk_user(factory, 1, email="old@test.local")
+    async with factory() as db:
+        user = await db.get(User, 1)
+        assert user is not None
+        assert (await auth_service.change_email(db, user, "new@test.local")) == "confirmation_sent"
+    # The change is still pending; the old-address owner reverts it.
+    revert_tok = (await _tokens_for(factory, 1, PURPOSE_REVERT))[0]
+    async with factory() as db:
+        await auth_service.revert_email_change(db, revert_tok.token)
+    # No email moved ...
+    assert (await _get_user(factory, 1)).email == "old@test.local"
+    # ... the paired change token was cancelled (revoked) and the revert used.
+    assert (await _tokens_for(factory, 1, PURPOSE_CHANGE))[0].status == STATUS_REVOKED
+    assert (await _tokens_for(factory, 1, PURPOSE_REVERT))[0].status == STATUS_USED
+
+
+async def _revert_switches_back_after_confirm(
+    factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    send, _ = _recorder()
+    monkeypatch.setattr(mail_service, "send_mail", send)
+    _env(
+        monkeypatch,
+        SMTP_ENABLED="true",
+        EMAIL_CHANGE_CONFIRMATION="true",
+        EMAIL_REGISTER_CONFIRMATION="false",
+    )
+    await _mk_user(factory, 1, email="old@test.local")
+    async with factory() as db:
+        user = await db.get(User, 1)
+        assert user is not None
+        assert (await auth_service.change_email(db, user, "new@test.local")) == "confirmation_sent"
+    # The new address confirms the change (email is now new@test.local) ...
+    change_tok = (await _tokens_for(factory, 1, PURPOSE_CHANGE))[0]
+    async with factory() as db:
+        await auth_service.confirm_email_token(db, change_tok.token)
+    assert (await _get_user(factory, 1)).email == "new@test.local"
+    # ... then the old-address owner reverts: the email switches back.
+    revert_tok = (await _tokens_for(factory, 1, PURPOSE_REVERT))[0]
+    async with factory() as db:
+        await auth_service.revert_email_change(db, revert_tok.token)
+    assert (await _get_user(factory, 1)).email == "old@test.local"
+    assert (await _tokens_for(factory, 1, PURPOSE_REVERT))[0].status == STATUS_USED
+
+
+async def _revert_rejects_invalid_and_conflicts(
+    factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    send, _ = _recorder()
+    monkeypatch.setattr(mail_service, "send_mail", send)
+    _env(
+        monkeypatch,
+        SMTP_ENABLED="true",
+        EMAIL_CHANGE_CONFIRMATION="true",
+        EMAIL_REGISTER_CONFIRMATION="false",
+    )
+    await _mk_user(factory, 1, email="old@test.local")
+    async with factory() as db:
+        user = await db.get(User, 1)
+        assert user is not None
+        assert (await auth_service.change_email(db, user, "new@test.local")) == "confirmation_sent"
+    # A garbage token 404s.
+    with pytest.raises(NotFound):
+        async with factory() as db:
+            await auth_service.revert_email_change(db, "not-a-real-token")
+    # A revert cancels the pending change; a second use of the same token 409s.
+    revert_tok = (await _tokens_for(factory, 1, PURPOSE_REVERT))[0]
+    async with factory() as db:
+        await auth_service.revert_email_change(db, revert_tok.token)
+    with pytest.raises(Conflict):
+        async with factory() as db:
+            await auth_service.revert_email_change(db, revert_tok.token)
+
+
+async def _revert_409_when_old_address_taken(
+    factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    send, _ = _recorder()
+    monkeypatch.setattr(mail_service, "send_mail", send)
+    _env(
+        monkeypatch,
+        SMTP_ENABLED="true",
+        EMAIL_CHANGE_CONFIRMATION="true",
+        EMAIL_REGISTER_CONFIRMATION="false",
+    )
+    await _mk_user(factory, 1, email="old@test.local")
+    await _mk_user(factory, 2, email="other@test.local")
+    async with factory() as db:
+        user = await db.get(User, 1)
+        assert user is not None
+        assert (await auth_service.change_email(db, user, "new@test.local")) == "confirmation_sent"
+    # The new address confirms the change (old@test.local is now free) ...
+    change_tok = (await _tokens_for(factory, 1, PURPOSE_CHANGE))[0]
+    async with factory() as db:
+        await auth_service.confirm_email_token(db, change_tok.token)
+    # ... and another account takes the previous address.
+    async with factory() as db:
+        other = await db.get(User, 2)
+        assert other is not None
+        other.email = "old@test.local"
+        await db.commit()
+    # Reverting would switch back to a taken address, so it 409s.
+    revert_tok = (await _tokens_for(factory, 1, PURPOSE_REVERT))[0]
+    with pytest.raises(Conflict):
+        async with factory() as db:
+            await auth_service.revert_email_change(db, revert_tok.token)
 
 
 async def _email_change_inactive_applies_immediately(
@@ -890,6 +1017,42 @@ def test_email_change_rejects_same_and_taken(
 ) -> None:
     async def _s(factory: async_sessionmaker) -> None:
         await _email_change_rejects_same_and_taken(factory, monkeypatch)
+
+    run_db(_s)
+
+
+def test_email_change_revert_cancels_pending(
+    run_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _s(factory: async_sessionmaker) -> None:
+        await _revert_cancels_pending_change(factory, monkeypatch)
+
+    run_db(_s)
+
+
+def test_email_change_revert_switches_back(
+    run_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _s(factory: async_sessionmaker) -> None:
+        await _revert_switches_back_after_confirm(factory, monkeypatch)
+
+    run_db(_s)
+
+
+def test_email_change_revert_invalid_and_conflicts(
+    run_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _s(factory: async_sessionmaker) -> None:
+        await _revert_rejects_invalid_and_conflicts(factory, monkeypatch)
+
+    run_db(_s)
+
+
+def test_email_change_revert_409_old_taken(
+    run_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _s(factory: async_sessionmaker) -> None:
+        await _revert_409_when_old_address_taken(factory, monkeypatch)
 
     run_db(_s)
 

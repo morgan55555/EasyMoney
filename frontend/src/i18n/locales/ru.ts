@@ -375,10 +375,11 @@ export const ru: Dict = {
   'settings.sectionAccount': 'Аккаунт',
   'settings.email': 'Email',
   'settings.emailChange': 'Сменить email',
-  'settings.emailHint': 'Перед применением на текущий адрес отправляется подтверждение.',
+  'settings.emailHint':
+    'На новый адрес отправляется подтверждение, а на текущий — ссылка «это не я».',
   'settings.emailChanged': 'Email изменён.',
   'settings.emailConfirmSent':
-    'Подтверждение отправлено на текущий адрес. Проверьте почту, чтобы завершить смену.',
+    'Отправлено два письма: подтверждение на новый адрес и ссылка «это не я» на текущий. Откройте подтверждение, чтобы завершить смену.',
   'settings.emailError': 'Не удалось сменить email',
 
   'settings.sectionAppearance': 'Оформление',
@@ -408,6 +409,16 @@ export const ru: Dict = {
   'confirm.backToLogin': 'К входу',
   'confirm.failure': 'Не удалось подтвердить',
   'confirm.failureText': 'Ссылка недействительна или просрочена.',
+
+  // --- Страница отмены смены email (ссылка «это не я») ---------------------------------------------------
+  'revert.title': 'Смена email',
+  'revert.working': 'Отменяем…',
+  'revert.success': 'Смена отменена',
+  'revert.successText': 'Смена email отменена. Вы можете войти со своим прежним адресом.',
+  'revert.openApp': 'Открыть EasyMoney',
+  'revert.backToLogin': 'К входу',
+  'revert.failure': 'Не удалось отменить',
+  'revert.failureText': 'Ссылка недействительна, уже использована или просрочена.',
 
   // --- Админ-панель ------------------------------------------------------------------------------------
   'admin.title': 'Администрирование',

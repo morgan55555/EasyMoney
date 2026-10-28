@@ -27,6 +27,11 @@ class UserOut(BaseModel):
     preferred_language: str = "en"
     # Short URL or null; the image itself is served by GET /users/{id}/avatar.
     avatar_url: str | None = None
+    # Effective server-side confirmation toggles (AGENTS.md §2.13): true only
+    # when the corresponding confirmation flow is actually enforced. Lets the
+    # settings modal show/hide the confirmation hints. Populated on GET /me.
+    email_change_confirmation: bool = False
+    password_change_confirmation: bool = False
 
 
 class MePatchRequest(BaseModel):

@@ -477,6 +477,15 @@ export function useConfirmEmail() {
   })
 }
 
+/** Apply a "this wasn't me" revert token; refresh /me so the email is current. */
+export function useRevertEmail() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (token: string) => api.authApi.revertEmail(token),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.me }),
+  })
+}
+
 export function useResendConfirmation() {
   return useMutation({ mutationFn: () => api.authApi.resendConfirmation() })
 }

@@ -36,6 +36,10 @@ export interface UserOut {
   preferred_language: 'en' | 'ru'
   /** Short avatar URL or null (image served by GET /users/{id}/avatar). */
   avatar_url: string | null
+  /** Effective server-side toggles (§2.13): true only when the confirmation
+   * flow is actually enforced; the settings modal shows its hints accordingly. */
+  email_change_confirmation: boolean
+  password_change_confirmation: boolean
 }
 
 // --- Profile / avatar / email confirmation (§2.13) ----------------------------
@@ -74,6 +78,12 @@ export interface EmailConfirmOut {
   ok: boolean
   email: string
   email_verified: boolean
+}
+
+/** POST /auth/email/revert response ("this wasn't me" revert). */
+export interface EmailRevertOut {
+  ok: boolean
+  email: string
 }
 
 // --- Admin (§2.13) -------------------------------------------------------------

@@ -125,8 +125,10 @@ Copy the values from the table below into `.env` (a `.env.example` will ship wit
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` / `SMTP_USE_TLS` | unset | Real SMTP; mail is log-only whenever `SMTP_HOST` is unset (independent of `DEBUG`) |
 | `SMTP_ENABLED` | `true` | Master switch for all outbound mail. `false` = never send (log only, even with `SMTP_HOST`), and all confirmation flows are skipped (register, email change and password change apply immediately) |
 | `EMAIL_REGISTER_CONFIRMATION` | `false` | Require email confirmation after registration (active only when `SMTP_ENABLED` is `true`) |
-| `EMAIL_CHANGE_CONFIRMATION` | `false` | Require confirmation (sent to the previous address) on email change (active only when `SMTP_ENABLED` is `true`) |
+| `EMAIL_CHANGE_CONFIRMATION` | `false` | Require confirmation on email change (active only when `SMTP_ENABLED` is `true`). When on, a confirm link is mailed to the **new** address and a "this wasn't me" revert link to the **previous** one |
 | `PASSWORD_CHANGE_CONFIRMATION` | `false` | Require confirmation (sent to the user's email; the new password is applied only when the link is opened) on password change (active only when `SMTP_ENABLED` is `true`) |
+| `CONFIRMATION_TOKEN_HOURS` | `24` | How long a confirmation link stays valid (hours); applies to the register, email-change and password-change confirmation links |
+| `EMAIL_CHANGE_REVERT_DAYS` | `2` | How long the "this wasn't me" revert link (sent to the previous address on an email change) stays valid (days); within this window the change can be reverted (cancelled if still pending, or switched back if already confirmed) |
 | `REGISTRATION_OPEN` | `true` | When `false`, only the first user can register (while the users table is empty); after that registration is closed (403) and the register form is hidden |
 | `MAX_AVATAR_MB` | `2` | Max raw size of a user avatar upload (stored as base64 in the DB) |
 | `FRONTEND_URL` | `http://localhost:8081` | Used to build invite links in emails |

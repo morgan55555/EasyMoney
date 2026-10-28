@@ -66,6 +66,14 @@ class Settings(BaseSettings):
     # Require confirmation (sent to the current address) on password change.
     # Active only when ``smtp_enabled`` is also true.
     password_change_confirmation: bool = False
+    # How long a confirmation link stays valid, in hours. Applied to the
+    # register, email-change and password-change confirmation links.
+    confirmation_token_hours: int = 24
+    # How long the "this wasn't me" revert link on the *previous* address stays
+    # valid, in days, after an email change is requested. Within this window the
+    # change can be reverted (cancelled if still pending, or switched back if
+    # the new address already confirmed it).
+    email_change_revert_days: int = 2
     # When false, only the first user can register (while the users table is
     # empty); after that registration is closed (403) and the UI hides the
     # register form.

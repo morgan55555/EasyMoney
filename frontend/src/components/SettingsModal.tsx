@@ -230,8 +230,13 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
               {emailMsg.text}
             </p>
           ) : null}
-          <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.emailHint')}</p>
-          <Field label={t('settings.passwordChange')} hint={t('settings.passwordHint')}>
+          {meData?.email_change_confirmation ? (
+            <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.emailHint')}</p>
+          ) : null}
+          <Field
+            label={t('settings.passwordChange')}
+            hint={meData?.password_change_confirmation ? t('settings.passwordHint') : undefined}
+          >
             <TextInput
               type="password"
               value={newPassword}

@@ -55,6 +55,17 @@ class EmailConfirmOut(BaseModel):
     email_verified: bool
 
 
+class EmailRevertRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=128)
+
+
+class EmailRevertOut(BaseModel):
+    """The result of applying a "this wasn't me" revert token (§2.13)."""
+
+    ok: bool = True
+    email: str
+
+
 class EmailChangeRequest(BaseModel):
     new_email: str = Field(min_length=3, max_length=320)
 

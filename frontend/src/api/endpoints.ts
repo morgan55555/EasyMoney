@@ -16,6 +16,7 @@ import type {
   CurrencyBalanceOut,
   EmailChangeResponse,
   EmailConfirmOut,
+  EmailRevertOut,
   ExpenseCreateBody,
   ExpenseOut,
   ExpenseUpdateBody,
@@ -47,6 +48,9 @@ export const authApi = {
   /** Apply a confirmation token (register or change). */
   confirmEmail: (token: string) =>
     apiFetch<EmailConfirmOut>('/api/auth/email/confirm', { method: 'POST', body: JSON.stringify({ token }) }, { isAuthCall: true }),
+  /** Apply a "this wasn't me" revert token for an email change. */
+  revertEmail: (token: string) =>
+    apiFetch<EmailRevertOut>('/api/auth/email/revert', { method: 'POST', body: JSON.stringify({ token }) }, { isAuthCall: true }),
   /** Resend the user's pending register confirmation (authenticated, 204). */
   resendConfirmation: () =>
     apiFetch<void>('/api/auth/email/resend', { method: 'POST' }),
