@@ -19,6 +19,11 @@ scenario sees exactly the toggles it needs:
     immediate swap) plus its 409s;
   * token lifecycle (confirm marks used; a second confirm 409s; resend revokes
     the previous pending token; an expired token 409s);
+  * password-change confirmation on/off (the pending new-password hash rides
+    on the token and is applied only on confirmation; too-short 422s, the
+    current password 409s; a reissue revokes the previous token);
+  * register with ``preferred_language`` (stored, defaults to "en", an
+    invalid value 422s);
   * the SMTP kill switch (``SMTP_ENABLED=false`` makes ``send_mail`` a no-op
     even with ``SMTP_HOST`` set, and skips confirmations);
   * avatar set/clear (base64 round-trip, content-type allow-list, size cap);
@@ -45,6 +50,7 @@ from app.core.errors import Conflict, Forbidden, NotFound, ValidationFailed
 from app.core.security import hash_password, verify_password
 from app.models.email_token import (
     PURPOSE_CHANGE,
+    PURPOSE_PASSWORD,
     PURPOSE_REGISTER,
     STATUS_PENDING,
     STATUS_REVOKED,
@@ -432,6 +438,178 @@ async def _expired_token_is_rejected(
             await auth_service.confirm_email_token(db, "expired-token-0001")
 
 
+# --- 5b. password-change confirmation ----------------------------------------
+
+
+async def _password_change_confirmation_active(
+    factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    send, sent = _recorder()
+    monkeypatch.setattr(mail_service, "send_mail", send)
+    _env(
+        monkeypatch,
+        SMTP_ENABLED="true",
+        PASSWORD_CHANGE_CONFIRMATION="true",
+        EMAIL_CHANGE_CONFIRMATION="false",
+    )
+    await _mk_user(factory, 1, email="pw@test.local", password="password1")
+    async with factory() as db:
+        user = await db.get(User, 1)
+        assert user is not None
+        status = await auth_service.change_password(db, user, "newpassword1")
+    assert status == "confirmation_sent"
+    # The password is NOT changed yet; a pending password token carries the
+    # new-password hash, and the mail went to the current address.
+    fresh = await _get_user(factory, 1)
+    assert verify_password("password1", fresh.password_hash) is True
+    assert verify_password("newpassword1", fresh.password_hash) is False
+    tokens = await _tokens_for(factory, 1, PURPOSE_PASSWORD)
+    assert len(tokens) == 1
+    assert tokens[0].status == STATUS_PENDING
+    assert tokens[0].target_email == "pw@test.local"
+    assert tokens[0].password_hash is not None
+    assert verify_password("newpassword1", tokens[0].password_hash)
+    assert len(sent) == 1
+    assert sent[0][0] == "pw@test.local"
+
+    # Confirming applies the pending hash and marks the token used.
+    async with factory() as db:
+        await auth_service.confirm_email_token(db, tokens[0].token)
+    fresh = await _get_user(factory, 1)
+    assert verify_password("password1", fresh.password_hash) is False
+    assert verify_password("newpassword1", fresh.password_hash) is True
+    assert (await _tokens_for(factory, 1, PURPOSE_PASSWORD))[0].status == STATUS_USED
+
+
+async def _password_change_inactive_applies_immediately(
+    factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    send, sent = _recorder()
+    monkeypatch.setattr(mail_service, "send_mail", send)
+    _env(monkeypatch, SMTP_ENABLED="true", PASSWORD_CHANGE_CONFIRMATION="false")
+    await _mk_user(factory, 1, password="password1")
+    async with factory() as db:
+        user = await db.get(User, 1)
+        assert user is not None
+        status = await auth_service.change_password(db, user, "newpassword1")
+    assert status == "changed"
+    assert verify_password("newpassword1", (await _get_user(factory, 1)).password_hash) is True
+    assert await _tokens_for(factory, 1, PURPOSE_PASSWORD) == []
+    assert sent == []
+
+
+async def _password_change_validations(
+    factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _env(monkeypatch, SMTP_ENABLED="true", PASSWORD_CHANGE_CONFIRMATION="false")
+    await _mk_user(factory, 1, password="password1")
+    async with factory() as db:
+        user = await db.get(User, 1)
+        assert user is not None
+        # Too short 422s ...
+        with pytest.raises(ValidationFailed):
+            await auth_service.change_password(db, user, "short")
+        # ... and keeping the current password 409s.
+        with pytest.raises(Conflict):
+            await auth_service.change_password(db, user, "password1")
+    # Nothing changed.
+    assert verify_password("password1", (await _get_user(factory, 1)).password_hash) is True
+
+
+async def _password_change_reissue_revokes_previous(
+    factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    send, _ = _recorder()
+    monkeypatch.setattr(mail_service, "send_mail", send)
+    _env(monkeypatch, SMTP_ENABLED="true", PASSWORD_CHANGE_CONFIRMATION="true")
+    await _mk_user(factory, 1, password="password1")
+    async with factory() as db:
+        user = await db.get(User, 1)
+        assert user is not None
+        await auth_service.change_password(db, user, "newpassword1")
+        # A second request supersedes the first pending token.
+        await auth_service.change_password(db, user, "newpassword2")
+    tokens = await _tokens_for(factory, 1, PURPOSE_PASSWORD)
+    assert len(tokens) == 2
+    first = tokens[0]
+    assert first.status == STATUS_REVOKED
+    new = next(t for t in tokens if t.status == STATUS_PENDING)
+    # The superseded token can no longer be confirmed; the fresh one applies
+    # the LATEST requested password (not the first one).
+    with pytest.raises(Conflict):
+        async with factory() as db:
+            await auth_service.confirm_email_token(db, first.token)
+    async with factory() as db:
+        await auth_service.confirm_email_token(db, new.token)
+    fresh = await _get_user(factory, 1)
+    assert verify_password("newpassword2", fresh.password_hash) is True
+    assert verify_password("newpassword1", fresh.password_hash) is False
+
+
+async def _password_token_expired_and_one_shot(
+    factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _env(monkeypatch, SMTP_ENABLED="true", PASSWORD_CHANGE_CONFIRMATION="false")
+    await _mk_user(factory, 1, password="password1")
+    pending_hash = hash_password("newpassword1")
+    async with factory() as db:
+        db.add(
+            EmailToken(
+                user_id=1,
+                purpose=PURPOSE_PASSWORD,
+                token="pw-expired-0001",
+                target_email="u1@test.local",
+                status=STATUS_PENDING,
+                expires_at=dt.datetime.now(dt.UTC) - dt.timedelta(hours=1),
+                password_hash=pending_hash,
+            )
+        )
+        db.add(
+            EmailToken(
+                user_id=1,
+                purpose=PURPOSE_PASSWORD,
+                token="pw-once-000001",
+                target_email="u1@test.local",
+                status=STATUS_USED,
+                expires_at=dt.datetime.now(dt.UTC) + dt.timedelta(hours=1),
+                password_hash=pending_hash,
+            )
+        )
+        await db.commit()
+    # Expired 409s; already-used 409s.
+    with pytest.raises(Conflict):
+        async with factory() as db:
+            await auth_service.confirm_email_token(db, "pw-expired-0001")
+    with pytest.raises(Conflict):
+        async with factory() as db:
+            await auth_service.confirm_email_token(db, "pw-once-000001")
+    # The password never changed.
+    assert verify_password("password1", (await _get_user(factory, 1)).password_hash) is True
+
+
+# --- 5c. register preferred_language -----------------------------------------
+
+
+async def _register_with_preferred_language(
+    factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _env(monkeypatch, SMTP_ENABLED="false")
+    async with factory() as db:
+        ru_id = (
+            await auth_service.register(db, "ru@test.local", "password1", None, "ru")
+        ).id
+        en_id = (
+            await auth_service.register(db, "en@test.local", "password1", None)
+        ).id
+    assert (await _get_user(factory, ru_id)).preferred_language == "ru"
+    # Unsupplied defaults to "en".
+    assert (await _get_user(factory, en_id)).preferred_language == "en"
+    # An invalid language 422s and creates no user.
+    with pytest.raises(ValidationFailed):
+        async with factory() as db:
+            await auth_service.register(db, "fr@test.local", "password1", None, "fr")
+
+
 # --- 6. SMTP kill switch -----------------------------------------------------
 
 
@@ -737,6 +915,60 @@ def test_resend_revokes_previous_pending(
 def test_expired_token_is_rejected(run_db: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     async def _s(factory: async_sessionmaker) -> None:
         await _expired_token_is_rejected(factory, monkeypatch)
+
+    run_db(_s)
+
+
+def test_password_change_confirmation_active(
+    run_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _s(factory: async_sessionmaker) -> None:
+        await _password_change_confirmation_active(factory, monkeypatch)
+
+    run_db(_s)
+
+
+def test_password_change_inactive_applies_immediately(
+    run_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _s(factory: async_sessionmaker) -> None:
+        await _password_change_inactive_applies_immediately(factory, monkeypatch)
+
+    run_db(_s)
+
+
+def test_password_change_validations(
+    run_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _s(factory: async_sessionmaker) -> None:
+        await _password_change_validations(factory, monkeypatch)
+
+    run_db(_s)
+
+
+def test_password_change_reissue_revokes_previous(
+    run_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _s(factory: async_sessionmaker) -> None:
+        await _password_change_reissue_revokes_previous(factory, monkeypatch)
+
+    run_db(_s)
+
+
+def test_password_token_expired_and_one_shot(
+    run_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _s(factory: async_sessionmaker) -> None:
+        await _password_token_expired_and_one_shot(factory, monkeypatch)
+
+    run_db(_s)
+
+
+def test_register_with_preferred_language(
+    run_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _s(factory: async_sessionmaker) -> None:
+        await _register_with_preferred_language(factory, monkeypatch)
 
     run_db(_s)
 
