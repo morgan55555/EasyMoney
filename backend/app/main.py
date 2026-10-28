@@ -28,6 +28,7 @@ from app.api import invites as invites_api
 from app.api import me as me_api
 from app.api import notifications as notifications_api
 from app.api import settlements as settlements_api
+from app.api import users as users_api
 from app.core.config import get_settings
 from app.core.errors import (
     Conflict,
@@ -164,6 +165,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_api.router)
     app.include_router(me_api.router)
+    app.include_router(users_api.router)
     app.include_router(groups_api.router)
     app.include_router(feed_api.router)
     app.include_router(invites_api.router)

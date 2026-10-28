@@ -34,3 +34,10 @@ class MePatchRequest(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
     # "en" | "ru". Changing this is the only way to set preferred_language.
     preferred_language: str | None = Field(default=None, pattern="^(en|ru)$")
+
+
+class AvatarSetResponse(BaseModel):
+    """Returned after a successful avatar upload."""
+
+    ok: bool = True
+    avatar_url: str

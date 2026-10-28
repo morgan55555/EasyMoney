@@ -1,17 +1,18 @@
-"""Current-user profile endpoints: GET /me, PATCH /me, email change
-(AGENTS.md §2.11, §2.13)."""
+"""Current-user profile endpoints: GET /me, PATCH /me, email change,
+avatar set/clear (AGENTS.md §2.11, §2.13)."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.schemas.auth import EmailChangeRequest, EmailChangeResponse
-from app.schemas.user import MePatchRequest, UserOut, avatar_url
+from app.schemas.user import AvatarSetResponse, MePatchRequest, UserOut, avatar_url
 from app.services import auth as auth_service
+from app.services import avatar as avatar_service
 
 router = APIRouter(prefix="/api", tags=["me"])
 
@@ -54,3 +55,25 @@ async def change_email(
 ) -> EmailChangeResponse:
     status = await auth_service.change_email(db, user, body.new_email)
     return EmailChangeResponse(status=status)
+
+
+@router.post("/me/avatar", response_model=AvatarSetResponse)
+async def set_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AvatarSetResponse:
+    """Upload an avatar image (PNG, JPEG, WebP, GIF; ≤ MAX_AVATAR_MB)."""
+    data = await file.read()
+    content_type = file.content_type or ""
+    await avatar_service.set_avatar(db, user, data, content_type)
+    return AvatarSetResponse(avatar_url=f"/api/users/{user.id}/avatar")
+
+
+@router.delete("/me/avatar", status_code=204)
+async def clear_avatar(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove the current avatar."""
+    await avatar_service.clear_avatar(db, user)
