@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { ApiError } from '../api/client'
 import { fetchAttachmentBlob } from '../api/endpoints'
-import { Button, ErrorText, Field, IconPaperclip, IconTrash, IconUpload, Modal, Select, TextInput, Textarea } from '../components/ui'
+import { Button, ErrorText, Field, IconEye, IconPaperclip, IconTrash, IconUpload, Modal, Select, TextInput, Textarea } from '../components/ui'
 import { useI18n, type TFunc } from '../i18n'
 import { formatMoney } from '../lib/money'
 import { localTodayIso } from '../lib/dates'
@@ -467,6 +467,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
             />
             {previewUrl ? (
               <Button variant="secondary" onClick={() => setOpenFull(true)}>
+                <IconEye />
                 {t('receipt.openFull')}
               </Button>
             ) : null}
