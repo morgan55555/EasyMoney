@@ -158,7 +158,7 @@ Reminders apply to **closed groups too** until settled (the close summary is not
 **User profile.** A `User` carries, beyond `email` / `password_hash` / `display_name`:
 - `is_admin: bool` (default `false`) — whether the user may use the admin panel.
 - `email_verified: bool` (default `true`) — whether the address is confirmed.
-- `preferred_language: "en" | "ru"` (default `"en"`) — the language of that user's emails and the default UI language.
+- `preferred_language: "en" | "ru"` (default `"en"`) — the language of that user's emails and the UI language inside the app.
 - `avatar_data: text | null` — base64-encoded image (no `data:` prefix).
 - `avatar_content_type: text | null` — e.g. `image/png` (matches `avatar_data`).
 
@@ -173,15 +173,20 @@ Reminders apply to **closed groups too** until settled (the close summary is not
 - not active → apply the new email immediately and return `{ status: "changed" }`.
 Emails are normalized to lowercase; a change to the email already in use is a 409. The target address must be unique among users.
 
-**Confirmation tokens.** One table `email_tokens` serves both confirmations: `id`, `user_id` (FK, CASCADE), `purpose` (`register` | `change`), `token` (URL-safe, unique, 128-bit), `target_email`, `status` (`pending` | `used` | `revoked`), `expires_at` (default `now() + 24h`). A token is valid while `status = "pending"` and unexpired; confirming marks it `used`. Reissuing (resend / new change request) revokes the previous `pending` token.
+**Password-change confirmation.** Active ⇔ `SMTP_ENABLED AND PASSWORD_CHANGE_CONFIRMATION`. `POST /api/me/password/change {new_password}` (≥ 8 chars; a new password equal to the current one is a 409):
+- active → create a `password` email token carrying the argon2 hash of the new password, mail the confirmation link to the user's **current** address, and return `{ status: "confirmation_sent" }` (the password is **not** changed yet). `POST /api/auth/email/confirm {token}` then applies the pending hash and marks the token `used`.
+- not active → apply the new password immediately and return `{ status: "changed" }`.
+A new change request revokes the previous pending `password` token (the reissue rule below); only the latest requested password can ever be applied.
+
+**Confirmation tokens.** One table `email_tokens` serves all three confirmations (register, email change, password change): `id`, `user_id` (FK, CASCADE), `purpose` (`register` | `change` | `password`), `token` (URL-safe, unique, 128-bit), `target_email`, `password_hash` (nullable, only on `password` tokens — the pending new-password hash, same type as `users.password_hash`), `status` (`pending` | `used` | `revoked`), `expires_at` (default `now() + 24h`). A token is valid while `status = "pending"` and unexpired; confirming marks it `used`. Reissuing (resend / a new change request) revokes the previous `pending` token. `resend` applies to register tokens only; the change and password flows are reissued by a fresh request.
 
 **Admin model.** The **first-ever registered user** becomes admin (`is_admin = true`); on an existing DB, a migration backfills `is_admin` on the lowest-id user if no admin exists. Admins (any `is_admin` user) may, **without email confirmation**: create users (`POST /api/admin/users`, 409 on duplicate email), and edit any user's `display_name` / `email` / `password` / `is_admin` (`PATCH /api/admin/users/{id}`). Guard: the **last remaining admin cannot be demoted or have their admin bit removed** (lockout protection). Admins get a **statistics** endpoint (`GET /api/admin/stats`).
 
-**Preferred language vs. UI language.** `preferred_language` is a server-side user setting, changed **only** in user settings. It (a) selects the language of that user's outbound emails (EN or RU; recipients without an account, e.g. invitees, default to EN) and (b) is the **default** UI language. The UI language (client, localStorage) is changed by the header switcher and **never** writes `preferred_language`. On page load the UI language resolves to: a stored manual choice if present, else the user's `preferred_language`, else `en`.
+**Preferred language vs. UI language.** `preferred_language` is a server-side user setting, changed **only** in user settings. It (a) selects the language of that user's outbound emails (EN or RU; recipients without an account, e.g. invitees, default to EN) and (b) **is** the UI language inside the app: on load the authenticated shell adopts `me.preferred_language` (state only, never persisted), so every account's preference takes effect and switching accounts switches the language. There is **no** language switcher in the app header. Outside the app (login / register / invite pages) a language selector (client, localStorage) lets the visitor read the page in either language; it defaults to the browser language (any `ru*` tag → RU, else EN) and the chosen language is sent as `preferred_language` with the registration request. Initial language on any page: the stored selector choice if present, else the browser language, else `en`.
 
 **Theme (dark/light/system).** A client-only preference (`light` | `dark` | `system`, default `system`), persisted in localStorage. `darkMode: "class"`: `light`/`dark` apply/remove a `.dark` class on `<html>`; `system` follows `prefers-color-scheme` (via a `matchMedia` listener). Not stored server-side, never part of the API.
 
-**SMTP master switch.** `SMTP_ENABLED` (default `true`) is the kill switch for all outbound mail: when `false`, `send_mail` is a log-only no-op **even when `SMTP_HOST` is set**, and all confirmation flows (registration + email change) are skipped (they apply immediately). `SMTP_HOST` unset → log-only as before. Every mail path still goes through `services/mail.py`.
+**SMTP master switch.** `SMTP_ENABLED` (default `true`) is the kill switch for all outbound mail: when `false`, `send_mail` is a log-only no-op **even when `SMTP_HOST` is set**, and all confirmation flows (registration, email change, password change) are skipped (they apply immediately). `SMTP_HOST` unset → log-only as before. Every mail path still goes through `services/mail.py`.
 
 ## 3. Architecture & conventions
 
@@ -274,7 +279,7 @@ Rules:
 
 ## 4. Environment & running
 
-See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `SMTP_ENABLED`, `EMAIL_REGISTER_CONFIRMATION`, `EMAIL_CHANGE_CONFIRMATION`, `REGISTRATION_OPEN`, `MAX_AVATAR_MB`, `DEBUG`, `DEBT_OVERDUE_DAYS`, `REMINDER_INTERVAL_DAYS`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `UPLOAD_DIR`, `CORS_ORIGINS`.
+See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `SMTP_ENABLED`, `EMAIL_REGISTER_CONFIRMATION`, `EMAIL_CHANGE_CONFIRMATION`, `PASSWORD_CHANGE_CONFIRMATION`, `REGISTRATION_OPEN`, `MAX_AVATAR_MB`, `DEBUG`, `DEBT_OVERDUE_DAYS`, `REMINDER_INTERVAL_DAYS`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `UPLOAD_DIR`, `CORS_ORIGINS`.
 
 Local dev without Docker (optional): `alembic upgrade head`, `uvicorn app.main:app --reload`, `npm run dev` (Vite proxies `/api`, `/ws` to `:8000`).
 
@@ -326,12 +331,13 @@ A change is done when:
 | 24 | Profile settings: name, avatar, email, preferred language | §2.13, §3.6 (Settings modal; `PATCH /me`, avatar + email endpoints) |
 | 25 | Avatars stored as base64 in the DB; shown in header + every username | §2.13 (`users.avatar_data`, `GET /users/{id}/avatar`) |
 | 26 | Email change sends confirmation to the previous address before applying | §2.13 (`EMAIL_CHANGE_CONFIRMATION`, `email_tokens`, `POST /me/email/change`) |
-| 27 | Preferred language drives email language + default UI language; switcher never writes it | §2.13, §3.6 (i18n preferred-default) |
+| 27 | Preferred language drives email language and the in-app UI language (no in-app switcher); the login-page selector defaults to the browser language and is sent as `preferred_language` on registration | §2.13, §3.6 (`preferred_language`, `applyPreferred`, login-page selector) |
 | 28 | Dark/light/browser theme (default browser) | §2.13, §3.6 (ThemeManager, `darkMode:"class"`) |
 | 29 | Optional email confirmation after registration (separate env from change confirmation) | §2.13 (`EMAIL_REGISTER_CONFIRMATION`, verify gate) |
 | 30 | Registration restriction (only first user can register) | §2.13 (`REGISTRATION_OPEN`, `GET /auth/status`) |
 | 31 | Admin panel: first user is admin; manage users; statistics | §2.13 (`is_admin`, `GET/PATCH /admin/users`, `GET /admin/stats`) |
 | 32 | Disable SMTP entirely via env (no mail, no confirmations) | §2.13 (`SMTP_ENABLED` kill switch in `services/mail.py`) |
+| 33 | Password change with optional email confirmation (pending hash rides on the token, applied only on confirm) | §2.13 (`PASSWORD_CHANGE_CONFIRMATION`, `email_tokens.password_hash`, `POST /me/password/change`) |
 
 ## 7. Style
 

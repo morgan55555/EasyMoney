@@ -55,6 +55,7 @@ services:
       # Email-confirmation toggles (active only when SMTP_ENABLED is true).
       EMAIL_REGISTER_CONFIRMATION: ${EMAIL_REGISTER_CONFIRMATION:-false}
       EMAIL_CHANGE_CONFIRMATION: ${EMAIL_CHANGE_CONFIRMATION:-false}
+      PASSWORD_CHANGE_CONFIRMATION: ${PASSWORD_CHANGE_CONFIRMATION:-false}
       # When false, only the first user can register (then it is closed).
       REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
       # Max raw size (MB) of a user avatar upload.
