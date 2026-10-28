@@ -1,4 +1,5 @@
-"""Account endpoints: register / login / refresh / logout (AGENTS.md §2.11)."""
+"""Account endpoints: register / login / refresh / logout, registration
+status, and email confirmation (AGENTS.md §2.11, §2.13)."""
 
 from __future__ import annotations
 
@@ -6,7 +7,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
+from app.core.security import get_current_user
+from app.models.user import User
 from app.schemas.auth import (
+    AuthStatusOut,
+    EmailConfirmRequest,
     LoginRequest,
     LogoutRequest,
     RefreshRequest,
@@ -41,3 +46,26 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)) -> T
 @router.post("/logout", status_code=204)
 async def logout(body: LogoutRequest, db: AsyncSession = Depends(get_db)) -> None:
     await auth_service.logout(db, body.refresh_token)
+
+
+@router.get("/status", response_model=AuthStatusOut)
+async def auth_status(db: AsyncSession = Depends(get_db)) -> AuthStatusOut:
+    """Public endpoint: whether the registration form should be shown."""
+    open = await auth_service.get_registration_status(db)
+    return AuthStatusOut(registration_open=open)
+
+
+@router.post("/email/confirm")
+async def email_confirm(body: EmailConfirmRequest, db: AsyncSession = Depends(get_db)) -> dict:
+    """Apply a confirmation token (register or change)."""
+    user = await auth_service.confirm_email_token(db, body.token)
+    return {"ok": True, "email": user.email, "email_verified": user.email_verified}
+
+
+@router.post("/email/resend", status_code=204)
+async def email_resend(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Resend the user's pending register confirmation."""
+    await auth_service.resend_confirmation(db, user, "register")

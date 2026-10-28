@@ -1,4 +1,4 @@
-"""Request/response schemas for the account endpoints (AGENTS.md §2.11).
+"""Request/response schemas for the account endpoints (AGENTS.md §2.11, §2.13).
 
 Emails are plain ``str`` here; normalization (lowercase, trim) and shape
 validation happen in the service so the same rules apply to every path that
@@ -33,3 +33,23 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+
+class AuthStatusOut(BaseModel):
+    """Whether the registration form should be shown (§2.13)."""
+
+    registration_open: bool
+
+
+class EmailConfirmRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=128)
+
+
+class EmailChangeRequest(BaseModel):
+    new_email: str = Field(min_length=3, max_length=320)
+
+
+class EmailChangeResponse(BaseModel):
+    """``"changed"`` (applied immediately) or ``"confirmation_sent"``."""
+
+    status: str

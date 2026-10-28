@@ -1,4 +1,5 @@
-"""Current-user profile endpoints: GET /me, PATCH /me (AGENTS.md §2.11)."""
+"""Current-user profile endpoints: GET /me, PATCH /me, email change
+(AGENTS.md §2.11, §2.13)."""
 
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.security import get_current_user
 from app.models.user import User
+from app.schemas.auth import EmailChangeRequest, EmailChangeResponse
 from app.schemas.user import MePatchRequest, UserOut, avatar_url
 from app.services import auth as auth_service
 
@@ -42,3 +44,13 @@ async def patch_me(
         db, user, body.display_name, body.preferred_language
     )
     return _user_out(updated)
+
+
+@router.post("/me/email/change", response_model=EmailChangeResponse)
+async def change_email(
+    body: EmailChangeRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EmailChangeResponse:
+    status = await auth_service.change_email(db, user, body.new_email)
+    return EmailChangeResponse(status=status)
