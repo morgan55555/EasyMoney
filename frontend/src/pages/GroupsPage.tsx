@@ -7,10 +7,11 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
-import { Badge, balanceClass, Button, Card, CardHeader, ErrorText, Field, Select, Spinner, TextInput, EmptyState } from '../components/ui'
+import { Badge, balanceClass, Button, Card, CardHeader, EmptyState, ErrorText, Field, SearchInput, Select, Spinner, TextInput } from '../components/ui'
 import { useI18n, pluralForm } from '../i18n'
 import { MEMBER_PLURAL } from '../i18n/locales'
 import { formatSigned } from '../lib/money'
+import { matchesAny } from '../lib/search'
 import { useCreateGroup, useGroups } from '../query/queries'
 
 /** Common currencies offered in the create form (any ISO 4217 is accepted). */
@@ -60,6 +61,11 @@ export function GroupsPage() {
   const [name, setName] = useState('')
   const [currency, setCurrency] = useState('EUR')
   const [formError, setFormError] = useState('')
+  const [query, setQuery] = useState('')
+
+  const allGroups = groups.data ?? []
+  // Filter by group name and currency code.
+  const visible = allGroups.filter((g) => matchesAny(query, g.name, g.currency))
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -114,51 +120,66 @@ export function GroupsPage() {
 
       {groups.isPending ? (
         <Spinner label={t('groups.loading')} />
-      ) : (groups.data ?? []).length === 0 ? (
+      ) : allGroups.length === 0 ? (
         <Card>
           <EmptyState title={t('groups.emptyTitle')} hint={t('groups.emptyHint')} />
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {(groups.data ?? []).map((g) => (
-            <Link key={g.id} to={`/groups/${g.id}`} className="block group">
-              <Card className="p-4 h-full hover:border-indigo-300 transition-colors">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-gray-900 truncate group-hover:text-indigo-700">{g.name}</h3>
-                      <Badge tone="gray" className="shrink-0">
-                        {g.currency}
-                      </Badge>
+        <div className="space-y-3">
+          <SearchInput
+            className="max-w-md"
+            value={query}
+            onChange={setQuery}
+            placeholder={t('groups.searchPlaceholder')}
+            clearLabel={t('common.clearSearch')}
+          />
+          {visible.length === 0 ? (
+            <Card>
+              <EmptyState title={t('groups.noResults')} />
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visible.map((g) => (
+                <Link key={g.id} to={`/groups/${g.id}`} className="block group">
+                  <Card className="p-4 h-full hover:border-indigo-300 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-gray-900 truncate group-hover:text-indigo-700">{g.name}</h3>
+                          <Badge tone="gray" className="shrink-0">
+                            {g.currency}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {t('groups.members', {
+                            n: g.member_count,
+                            plural: pluralForm(locale, g.member_count, MEMBER_PLURAL[lang]),
+                          })}
+                        </p>
+                      </div>
+                      {g.status === 'closed' ? (
+                        <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5 shrink-0">
+                          {t('groups.closed')}
+                        </span>
+                      ) : null}
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {t('groups.members', {
-                        n: g.member_count,
-                        plural: pluralForm(locale, g.member_count, MEMBER_PLURAL[lang]),
-                      })}
-                    </p>
-                  </div>
-                  {g.status === 'closed' ? (
-                    <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5 shrink-0">
-                      {t('groups.closed')}
-                    </span>
-                  ) : null}
-                </div>
-                <div className="mt-3 text-right">
-                  <span className={`text-lg font-semibold tabular-nums ${balanceClass(g.balance)}`}>
-                    {formatSigned(g.balance, g.currency, locale)}
-                  </span>
-                  <span className="block text-[11px] text-gray-400">
-                    {g.balance.startsWith('-')
-                      ? t('groups.balanceOwe')
-                      : g.balance === '0' || Number(g.balance.replace(/,/g, '')) === 0
-                        ? t('groups.balanceSettled')
-                        : t('groups.balanceOwed')}
-                  </span>
-                </div>
-              </Card>
-            </Link>
-          ))}
+                    <div className="mt-3 text-right">
+                      <span className={`text-lg font-semibold tabular-nums ${balanceClass(g.balance)}`}>
+                        {formatSigned(g.balance, g.currency, locale)}
+                      </span>
+                      <span className="block text-[11px] text-gray-400">
+                        {g.balance.startsWith('-')
+                          ? t('groups.balanceOwe')
+                          : g.balance === '0' || Number(g.balance.replace(/,/g, '')) === 0
+                            ? t('groups.balanceSettled')
+                            : t('groups.balanceOwed')}
+                      </span>
+                    </div>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

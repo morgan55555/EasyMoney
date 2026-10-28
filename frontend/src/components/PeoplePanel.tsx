@@ -11,9 +11,10 @@ import { useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { useI18n } from '../i18n'
 import { formatDate } from '../lib/dates'
+import { matchesAny } from '../lib/search'
 import { useLeaveGroup, useMembers, useMe, useRemoveMember } from '../query/queries'
 import type { MemberOut } from '../types'
-import { Badge, Button, Card, CardHeader, ErrorText, IconUserMinus, IconButton, Modal, Spinner } from './ui'
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorText, IconUserMinus, IconButton, Modal, SearchInput, Spinner } from './ui'
 
 export function PeoplePanel({ groupId }: { groupId: number }) {
   const members = useMembers(groupId)
@@ -26,11 +27,14 @@ export function PeoplePanel({ groupId }: { groupId: number }) {
   const [removing, setRemoving] = useState<MemberOut | null>(null)
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
 
   if (members.isPending) return <Spinner label={t('people.loading')} />
 
   const meId = me.data?.id ?? -1
   const iAmOwner = members.data?.some((m) => m.id === meId && m.is_owner) ?? false
+  // Filter by display name and email.
+  const visible = (members.data ?? []).filter((m) => matchesAny(query, m.display_name, m.email))
 
   const onLeave = async () => {
     setError('')
@@ -55,8 +59,18 @@ export function PeoplePanel({ groupId }: { groupId: number }) {
 
       <Card>
         <CardHeader title={t('people.members', { n: members.data?.length ?? 0 })} />
+        {(members.data ?? []).length > 0 ? (
+          <div className="px-4 pt-3">
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder={t('people.searchPlaceholder')}
+              clearLabel={t('common.clearSearch')}
+            />
+          </div>
+        ) : null}
         <ul className="divide-y divide-gray-100">
-          {(members.data ?? []).map((m) => (
+          {visible.map((m) => (
             <li key={m.id} className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
                 <p className="text-sm text-gray-800 flex items-center gap-2">
@@ -76,6 +90,7 @@ export function PeoplePanel({ groupId }: { groupId: number }) {
             </li>
           ))}
         </ul>
+        {visible.length === 0 ? <EmptyState title={t('people.noResults')} /> : null}
       </Card>
 
       {removing ? (

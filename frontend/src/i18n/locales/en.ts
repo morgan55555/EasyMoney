@@ -19,6 +19,7 @@ export const en: Dict = {
   'common.you': 'you',
   'common.someone': 'Someone',
   'common.userById': 'User {{id}}',
+  'common.clearSearch': 'Clear search',
 
   // --- Nav / layout -------------------------------------------------------------
   'nav.groups': 'Groups',
@@ -56,6 +57,8 @@ export const en: Dict = {
   'groups.loading': 'Loading groups…',
   'groups.emptyTitle': 'No groups yet',
   'groups.emptyHint': 'Create a group above or accept an invitation link to join one.',
+  'groups.searchPlaceholder': 'Search groups…',
+  'groups.noResults': 'No groups match your search',
   'groups.members': '{{n}} {{plural}}',
   'groups.closed': 'closed',
   'groups.balanceOwe': 'you owe',
@@ -127,6 +130,8 @@ export const en: Dict = {
     'This group is closed: new expenses are disabled. The owner can reopen it from the group header.',
   'expenses.emptyTitle': 'No expenses yet',
   'expenses.emptyHint': 'Add the first expense to start splitting.',
+  'expenses.searchPlaceholder': 'Search expenses…',
+  'expenses.noResults': 'No expenses match your search',
   'expenses.showMore': 'Show more ({{n}})',
   'expenses.loading': 'Loading expenses…',
   'expenses.deleted': 'deleted',
@@ -320,6 +325,8 @@ export const en: Dict = {
   'people.leaveModalBody':
     "Leave this group? You'll lose access to its expenses and balances. If you have an outstanding balance, it will still be tracked — you can settle it after you leave.",
   'people.leaveConfirm': 'Leave',
+  'people.searchPlaceholder': 'Search members…',
+  'people.noResults': 'No members match your search',
 
   // --- Invites panel -----------------------------------------------------------------------------------------------------------------------
   'invites.title': 'Invite people',

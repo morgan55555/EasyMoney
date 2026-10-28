@@ -19,6 +19,7 @@ export const ru: Dict = {
   'common.you': 'вы',
   'common.someone': 'Кто-то',
   'common.userById': 'Пользователь {{id}}',
+  'common.clearSearch': 'Очистить поиск',
 
   // --- Навигация / каркас ---------------------------------------------------------
   'nav.groups': 'Группы',
@@ -56,6 +57,8 @@ export const ru: Dict = {
   'groups.loading': 'Загрузка групп…',
   'groups.emptyTitle': 'Пока нет групп',
   'groups.emptyHint': 'Создайте группу выше или примите приглашение, чтобы присоединиться.',
+  'groups.searchPlaceholder': 'Поиск по группам…',
+  'groups.noResults': 'Нет групп, подходящих под запрос',
   'groups.members': '{{n}} {{plural}}',
   'groups.closed': 'закрыта',
   'groups.balanceOwe': 'вы должны',
@@ -127,6 +130,8 @@ export const ru: Dict = {
     'Группа закрыта: добавление расходов недоступно. Владелец может открыть её в шапке группы.',
   'expenses.emptyTitle': 'Пока нет расходов',
   'expenses.emptyHint': 'Добавьте первый расход, чтобы начать делить.',
+  'expenses.searchPlaceholder': 'Поиск по расходам…',
+  'expenses.noResults': 'Нет расходов, подходящих под запрос',
   'expenses.showMore': 'Показать ещё ({{n}})',
   'expenses.loading': 'Загрузка расходов…',
   'expenses.deleted': 'удалён',
@@ -321,6 +326,8 @@ export const ru: Dict = {
   'people.leaveModalBody':
     'Покинуть эту группу? Вы потеряете доступ к её расходам и балансам. Если у вас есть задолженность, она продолжит учитываться — вы можете рассчитаться и после выхода.',
   'people.leaveConfirm': 'Покинуть',
+  'people.searchPlaceholder': 'Поиск по участникам…',
+  'people.noResults': 'Нет участников, подходящих под запрос',
 
   // --- Панель приглашений --------------------------------------------------------------------------------------------------
   'invites.title': 'Пригласить людей',

@@ -4,14 +4,15 @@
  * Only active expenses are listed — the backend hides soft-deleted rows.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { useI18n, type TFunc } from '../i18n'
 import { formatDate } from '../lib/dates'
 import { formatMoney } from '../lib/money'
+import { matchesAny } from '../lib/search'
 import { useDeleteExpense, useExpenses, useGroup, useMembers, useMe } from '../query/queries'
 import type { ExpenseOut } from '../types'
-import { Button, Card, EmptyState, IconEdit, IconButton, IconTrash, Modal, Spinner } from './ui'
+import { Button, Card, EmptyState, IconEdit, IconButton, IconTrash, Modal, SearchInput, Spinner } from './ui'
 import { ExpenseForm } from './ExpenseForm'
 import { ReceiptUpload } from './ReceiptUpload'
 
@@ -42,11 +43,26 @@ export function ExpenseList({ groupId }: { groupId: number }) {
   const [editing, setEditing] = useState<ExpenseOut | null>(null)
   const [deleting, setDeleting] = useState<ExpenseOut | null>(null)
   const [visible, setVisible] = useState(PAGE_SIZE)
+  const [query, setQuery] = useState('')
+
+  // A new filter starts from the first page.
+  useEffect(() => setVisible(PAGE_SIZE), [query])
 
   const currency = group.data?.currency ?? 'EUR'
   if (expenses.isPending) return <Spinner label={t('expenses.loading')} />
 
   const list = expenses.data ?? []
+  // Filter by description, comment, payer, participants and (translated) category.
+  const filtered = list.filter((e) =>
+    matchesAny(
+      query,
+      e.description,
+      e.comment,
+      e.payer,
+      categoryLabel(t, e.category),
+      ...e.participants.map((p) => p.display_name),
+    ),
+  )
   const closed = group.data?.status === 'closed'
   const canManage = (e: ExpenseOut) =>
     (me.data?.id ?? -1) === e.created_by || (me.data?.id ?? -1) === (group.data?.created_by ?? -1)
@@ -79,7 +95,20 @@ export function ExpenseList({ groupId }: { groupId: number }) {
         </Card>
       ) : (
         <div className="space-y-3">
-          {list.slice(0, visible).map((e) => (
+          <SearchInput
+            className="max-w-md"
+            value={query}
+            onChange={setQuery}
+            placeholder={t('expenses.searchPlaceholder')}
+            clearLabel={t('common.clearSearch')}
+          />
+          {filtered.length === 0 ? (
+            <Card>
+              <EmptyState title={t('expenses.noResults')} />
+            </Card>
+          ) : (
+            <>
+          {filtered.slice(0, visible).map((e) => (
             <Card key={e.id}>
               <div className="p-4 space-y-2">
                 <div className="flex items-start justify-between gap-3">
@@ -144,13 +173,15 @@ export function ExpenseList({ groupId }: { groupId: number }) {
               </div>
             </Card>
           ))}
-          {visible < list.length ? (
+          {visible < filtered.length ? (
             <div className="text-center pt-1">
               <Button variant="ghost" onClick={() => setVisible((v) => v + PAGE_SIZE)}>
-                {t('expenses.showMore', { n: Math.min(PAGE_SIZE, list.length - visible) })}
+                {t('expenses.showMore', { n: Math.min(PAGE_SIZE, filtered.length - visible) })}
               </Button>
             </div>
           ) : null}
+            </>
+          )}
         </div>
       )}
 
