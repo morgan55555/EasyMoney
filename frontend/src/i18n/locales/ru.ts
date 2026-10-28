@@ -173,6 +173,7 @@ export const ru: Dict = {
   'splitLine.exact': 'точные суммы',
 
   // --- Категории ------------------------------------------------------------------------------------
+  'category.na': 'Н/Д',
   'category.food': 'еда',
   'category.transport': 'транспорт',
   'category.housing': 'жильё',

@@ -25,7 +25,7 @@ import { useCreateExpense, useDeleteReceipt, useMe, useUploadReceipt, useUploadR
 import type { AttachmentOut, ExpenseOut, MemberOut, SplitMethod } from '../types'
 import { ACCEPT } from './ReceiptUpload'
 
-const CATEGORIES = ['food', 'transport', 'housing', 'entertainment', 'shopping', 'health', 'other']
+const CATEGORIES = ['na', 'food', 'transport', 'housing', 'entertainment', 'shopping', 'health', 'other']
 
 interface Props {
   groupId: number
@@ -70,7 +70,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
   const [description, setDescription] = useState(initial?.description ?? '')
   const [amount, setAmount] = useState(initial?.amount ?? '')
   const [date, setDate] = useState(initial?.date ?? localTodayIso())
-  const [category, setCategory] = useState(initial?.category ?? 'food')
+  const [category, setCategory] = useState(initial?.category ?? 'na')
   const [comment, setComment] = useState(initial?.comment ?? '')
   const [payerId, setPayerId] = useState<number>(initial?.payer_id ?? defaultPayer)
   const [method, setMethod] = useState<SplitMethod>(initial?.split_method ?? 'equal')

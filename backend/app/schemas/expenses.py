@@ -39,7 +39,7 @@ class ExpenseCreate(BaseModel):
     description: str = Field(min_length=1, max_length=200)
     amount: Decimal = Field(gt=0)
     split_method: str = Field(default="equal", pattern="^(equal|weighted|exact)$")
-    category: str = Field(default="general", max_length=40)
+    category: str = Field(default="na", max_length=40)
     # ``dt.date`` (not a bare ``date`` alias): a field named ``date`` with a
     # default would shadow the type in the class namespace and break
     # Pydantic's deferred annotation evaluation.

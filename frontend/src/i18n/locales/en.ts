@@ -173,6 +173,7 @@ export const en: Dict = {
   'splitLine.exact': 'exact-amount split',
 
   // --- Categories ------------------------------------------------------------------------------
+  'category.na': 'N/A',
   'category.food': 'food',
   'category.transport': 'transport',
   'category.housing': 'housing',
