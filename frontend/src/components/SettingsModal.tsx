@@ -209,7 +209,12 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           <Field
             label={t('settings.emailChange')}
             trailing={
-              <Button onClick={submitEmail} busy={changeEmail.isPending} disabled={!newEmail.trim()}>
+              <Button
+                onClick={submitEmail}
+                busy={changeEmail.isPending}
+                disabled={!newEmail.trim()}
+                className="w-40"
+              >
                 {t('settings.emailChange')}
               </Button>
             }
@@ -240,7 +245,12 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             label={t('settings.passwordChange')}
             hint={t('auth.passwordHint')}
             trailing={
-              <Button onClick={submitPassword} busy={changePassword.isPending} disabled={newPassword.length < 8}>
+              <Button
+                onClick={submitPassword}
+                busy={changePassword.isPending}
+                disabled={newPassword.length < 8}
+                className="w-40"
+              >
                 {t('settings.passwordChange')}
               </Button>
             }
@@ -279,7 +289,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             </Select>
           </Field>
           <div className="space-y-1">
-            <span className="block text-sm font-medium text-gray-700">{t('settings.theme')}</span>
+            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('settings.theme')}</span>
             <div className="flex w-full rounded-md border border-gray-300 bg-white p-0.5 dark:border-gray-600 dark:bg-gray-800">
               {themeOptions.map((opt) => (
                 <button
