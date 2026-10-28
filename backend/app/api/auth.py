@@ -11,6 +11,7 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.schemas.auth import (
     AuthStatusOut,
+    EmailConfirmOut,
     EmailConfirmRequest,
     LoginRequest,
     LogoutRequest,
@@ -55,11 +56,13 @@ async def auth_status(db: AsyncSession = Depends(get_db)) -> AuthStatusOut:
     return AuthStatusOut(registration_open=open)
 
 
-@router.post("/email/confirm")
-async def email_confirm(body: EmailConfirmRequest, db: AsyncSession = Depends(get_db)) -> dict:
+@router.post("/email/confirm", response_model=EmailConfirmOut)
+async def email_confirm(
+    body: EmailConfirmRequest, db: AsyncSession = Depends(get_db)
+) -> EmailConfirmOut:
     """Apply a confirmation token (register or change)."""
     user = await auth_service.confirm_email_token(db, body.token)
-    return {"ok": True, "email": user.email, "email_verified": user.email_verified}
+    return EmailConfirmOut(email=user.email, email_verified=user.email_verified)
 
 
 @router.post("/email/resend", status_code=204)

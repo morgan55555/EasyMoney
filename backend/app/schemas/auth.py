@@ -45,6 +45,14 @@ class EmailConfirmRequest(BaseModel):
     token: str = Field(min_length=1, max_length=128)
 
 
+class EmailConfirmOut(BaseModel):
+    """The result of applying a confirmation token (§2.13)."""
+
+    ok: bool = True
+    email: str
+    email_verified: bool
+
+
 class EmailChangeRequest(BaseModel):
     new_email: str = Field(min_length=3, max_length=320)
 
