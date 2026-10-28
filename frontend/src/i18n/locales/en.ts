@@ -374,8 +374,6 @@ export const en: Dict = {
   'settings.sectionAccount': 'Account',
   'settings.email': 'Email',
   'settings.emailChange': 'Change email',
-  'settings.emailHint':
-    'A confirmation is sent to your new address, and a “this wasn’t me” link to your current address.',
   'settings.emailChanged': 'Email changed.',
   'settings.emailConfirmSent':
     'Two emails were sent: a confirmation to your new address and a “this wasn’t me” link to your current one. Open the confirmation to finish the change.',
@@ -385,7 +383,6 @@ export const en: Dict = {
   'settings.language': 'Language',
   'settings.languageHint': 'Used for your emails and sets the interface language.',
   'settings.passwordChange': 'Change password',
-  'settings.passwordHint': 'A confirmation link is sent to your email; the password changes when you open it.',
   'settings.passwordChanged': 'Password changed.',
   'settings.passwordConfirmSent': 'A confirmation link was sent to your email.',
   'settings.passwordError': 'Could not change the password',

@@ -375,8 +375,6 @@ export const ru: Dict = {
   'settings.sectionAccount': 'Аккаунт',
   'settings.email': 'Email',
   'settings.emailChange': 'Сменить email',
-  'settings.emailHint':
-    'На новый адрес отправляется подтверждение, а на текущий — ссылка «это не я».',
   'settings.emailChanged': 'Email изменён.',
   'settings.emailConfirmSent':
     'Отправлено два письма: подтверждение на новый адрес и ссылка «это не я» на текущий. Откройте подтверждение, чтобы завершить смену.',
@@ -386,7 +384,6 @@ export const ru: Dict = {
   'settings.language': 'Язык',
   'settings.languageHint': 'Используется для ваших писем и задаёт язык интерфейса.',
   'settings.passwordChange': 'Сменить пароль',
-  'settings.passwordHint': 'На ваш email придёт ссылка для подтверждения; пароль сменится после её открытия.',
   'settings.passwordChanged': 'Пароль изменён.',
   'settings.passwordConfirmSent': 'Ссылка для подтверждения отправлена на ваш email.',
   'settings.passwordError': 'Не удалось сменить пароль',

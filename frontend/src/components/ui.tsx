@@ -225,11 +225,29 @@ export function IconButton({
 const fieldBase =
   'block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-800'
 
-export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+export function Field({
+  label,
+  children,
+  hint,
+  trailing,
+}: {
+  label: string
+  children: ReactNode
+  hint?: string
+  /** Optional element (e.g. an action button) rendered on the same row, to the right of the control. */
+  trailing?: ReactNode
+}) {
   return (
     <label className="block">
       <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</span>
-      {children}
+      {trailing ? (
+        <span className="flex items-center gap-2">
+          <span className="min-w-0 flex-1">{children}</span>
+          <span className="shrink-0">{trailing}</span>
+        </span>
+      ) : (
+        children
+      )}
       {hint ? <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">{hint}</span> : null}
     </label>
   )

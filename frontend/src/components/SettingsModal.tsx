@@ -145,7 +145,14 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
         {/* Profile ---------------------------------------------------------- */}
         <section className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">{t('settings.sectionProfile')}</h3>
-          <Field label={t('settings.displayName')}>
+          <Field
+            label={t('settings.displayName')}
+            trailing={
+              <Button onClick={saveName} busy={patchMe.isPending} disabled={!name.trim()}>
+                {t('settings.save')}
+              </Button>
+            }
+          >
             <TextInput
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -155,20 +162,15 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
               }}
             />
           </Field>
-          <div className="flex items-center gap-3">
-            <Button onClick={saveName} busy={patchMe.isPending} disabled={!name.trim()}>
-              {t('settings.save')}
-            </Button>
-            {nameMsg ? (
-              <span
-                className={`text-sm ${
-                  nameMsg.kind === 'success' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
-                }`}
-              >
-                {nameMsg.text}
-              </span>
-            ) : null}
-          </div>
+          {nameMsg ? (
+            <p
+              className={`text-sm ${
+                nameMsg.kind === 'success' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+              }`}
+            >
+              {nameMsg.text}
+            </p>
+          ) : null}
         </section>
 
         {/* Avatar ----------------------------------------------------------- */}
@@ -204,7 +206,14 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {t('settings.email')}: <span className="font-medium text-gray-700 dark:text-gray-200">{meData?.email ?? '…'}</span>
           </p>
-          <Field label={t('settings.emailChange')}>
+          <Field
+            label={t('settings.emailChange')}
+            trailing={
+              <Button onClick={submitEmail} busy={changeEmail.isPending} disabled={!newEmail.trim()}>
+                {t('settings.emailChange')}
+              </Button>
+            }
+          >
             <TextInput
               type="email"
               value={newEmail}
@@ -214,9 +223,6 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
               }}
             />
           </Field>
-          <Button onClick={submitEmail} busy={changeEmail.isPending} disabled={!newEmail.trim()}>
-            {t('settings.emailChange')}
-          </Button>
           {emailMsg ? (
             <p
               className={`text-sm ${
@@ -230,12 +236,14 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
               {emailMsg.text}
             </p>
           ) : null}
-          {meData?.email_change_confirmation ? (
-            <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.emailHint')}</p>
-          ) : null}
           <Field
             label={t('settings.passwordChange')}
-            hint={meData?.password_change_confirmation ? t('settings.passwordHint') : undefined}
+            hint={t('auth.passwordHint')}
+            trailing={
+              <Button onClick={submitPassword} busy={changePassword.isPending} disabled={newPassword.length < 8}>
+                {t('settings.passwordChange')}
+              </Button>
+            }
           >
             <TextInput
               type="password"
@@ -246,9 +254,6 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
               }}
             />
           </Field>
-          <Button onClick={submitPassword} busy={changePassword.isPending} disabled={newPassword.length < 8}>
-            {t('settings.passwordChange')}
-          </Button>
           {passwordMsg ? (
             <p
               className={`text-sm ${
@@ -275,14 +280,14 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           </Field>
           <div className="space-y-1">
             <span className="block text-sm font-medium text-gray-700">{t('settings.theme')}</span>
-            <div className="inline-flex rounded-md border border-gray-300 bg-white p-0.5 dark:border-gray-600 dark:bg-gray-800">
+            <div className="flex w-full rounded-md border border-gray-300 bg-white p-0.5 dark:border-gray-600 dark:bg-gray-800">
               {themeOptions.map((opt) => (
                 <button
                   key={opt}
                   type="button"
                   onClick={() => setTheme(opt)}
                   aria-pressed={theme === opt}
-                  className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
+                  className={`flex-1 rounded px-3 py-1 text-sm font-medium transition-colors ${
                     theme === opt
                       ? 'bg-indigo-600 text-white'
                       : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
