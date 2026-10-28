@@ -16,6 +16,7 @@ import { z } from 'zod'
 import { ApiError, setTokens } from '../api/client'
 import { authApi } from '../api/endpoints'
 import { Button, Card, ErrorText, Field, Spinner, TextInput } from '../components/ui'
+import { AppIcon } from '../components/AppIcon'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { useI18n } from '../i18n'
 import { useAuthStatus } from '../query/queries'
@@ -89,7 +90,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
         <LanguageSwitcher />
       </div>
       <div className="w-full max-w-sm">
-        <img src="/icon.png" alt="" className="h-24 w-24 mx-auto mb-4 rounded-2xl shadow-sm" />
+        <AppIcon className="h-24 w-24 mx-auto mb-4 rounded-2xl shadow-sm" />
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50 text-center mb-1">
           Easy<span className="text-indigo-600 dark:text-indigo-400">Money</span>
         </h1>

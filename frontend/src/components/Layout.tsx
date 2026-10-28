@@ -15,6 +15,7 @@ import { authApi } from '../api/endpoints'
 import { useI18n } from '../i18n'
 import { useMe, bindSocket } from '../query/queries'
 import { socket } from '../ws/socket'
+import { AppIcon } from './AppIcon'
 import { NotificationsBell } from './NotificationsBell'
 import { SettingsModal } from './SettingsModal'
 import { UserMenu } from './UserMenu'
@@ -72,7 +73,7 @@ export function Layout() {
       <header className="bg-white border-b border-gray-200 dark:bg-gray-900 dark:border-gray-800">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center gap-4">
           <Link to="/" className="flex items-center gap-2 text-2xl font-bold text-gray-900 tracking-tight dark:text-gray-50">
-            <img src="/icon.png" alt="" className="h-12 w-12 rounded-md" />
+            <AppIcon className="h-12 w-12 rounded-md" />
             <span>
               Easy<span className="text-indigo-600">Money</span>
             </span>

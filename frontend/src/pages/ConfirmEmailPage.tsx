@@ -12,6 +12,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { useI18n } from '../i18n'
 import { useConfirmEmail } from '../query/queries'
+import { AppIcon } from '../components/AppIcon'
 import { Button, Card } from '../components/ui'
 
 type Phase = 'working' | 'success' | 'failure'
@@ -40,7 +41,7 @@ export function ConfirmEmailPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <img src="/icon.png" alt="" className="h-20 w-20 mx-auto mb-4 rounded-2xl shadow-sm" />
+        <AppIcon className="h-20 w-20 mx-auto mb-4 rounded-2xl shadow-sm" />
         <h1 className="text-xl font-bold text-gray-900 text-center mb-4 dark:text-gray-50">
           {t('confirm.title')}
         </h1>

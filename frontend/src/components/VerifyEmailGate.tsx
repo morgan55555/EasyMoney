@@ -12,6 +12,7 @@ import { ApiError } from '../api/client'
 import { useI18n } from '../i18n'
 import { useResendConfirmation } from '../query/queries'
 import type { UserOut } from '../types'
+import { AppIcon } from './AppIcon'
 import { Button, Card } from './ui'
 
 export function VerifyEmailGate({ me }: { me: UserOut }) {
@@ -31,7 +32,7 @@ export function VerifyEmailGate({ me }: { me: UserOut }) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <img src="/icon.png" alt="" className="h-20 w-20 mx-auto mb-4 rounded-2xl shadow-sm" />
+        <AppIcon className="h-20 w-20 mx-auto mb-4 rounded-2xl shadow-sm" />
         <h1 className="text-xl font-bold text-gray-900 text-center mb-1 dark:text-gray-50">
           Easy<span className="text-indigo-600">Money</span>
         </h1>
