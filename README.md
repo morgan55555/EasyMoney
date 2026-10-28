@@ -295,4 +295,3 @@ This project is licensed under the [GNU General Public License v3.0](LICENSE) (G
 - Horizontal backend scaling behind a load balancer (needs a WS pub/sub broker, e.g. Redis).
 - Object storage (S3-compatible) for receipts — v1 uses a Docker volume.
 - Mobile app.
-- Email verification flow.
