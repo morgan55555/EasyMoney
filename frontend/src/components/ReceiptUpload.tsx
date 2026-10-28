@@ -118,7 +118,7 @@ export function ReceiptUpload({ expense, groupId }: { expense: ExpenseOut; group
           </Button>
         )}
       </div>
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      {error ? <p className="text-xs text-red-600 dark:text-red-400">{error}</p> : null}
       {viewUrl ? (
         <Modal title={t('receipt.file')} onClose={() => setViewUrl(null)} wide closeOnBackdrop>
           {viewKind === 'image' ? (
@@ -127,14 +127,14 @@ export function ReceiptUpload({ expense, groupId }: { expense: ExpenseOut; group
             <iframe
               src={viewUrl}
               title={t('receipt.file')}
-              className="h-[70vh] w-full rounded-md border border-gray-200"
+              className="h-[70vh] w-full rounded-md border border-gray-200 dark:border-gray-800"
             />
           )}
         </Modal>
       ) : null}
       {confirmRemove ? (
         <Modal title={t('receipt.removeModalTitle')} onClose={() => setConfirmRemove(false)}>
-          <p className="text-sm text-gray-700">{t('receipt.removeModalBody')}</p>
+          <p className="text-sm text-gray-700 dark:text-gray-300">{t('receipt.removeModalBody')}</p>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="secondary" onClick={() => setConfirmRemove(false)}>
               {t('common.cancel')}

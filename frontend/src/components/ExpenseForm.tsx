@@ -332,7 +332,9 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
               type="button"
               onClick={() => setMethod(m)}
               className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium border transition-colors ${
-                method === m ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                method === m
+                  ? 'bg-indigo-600 border-indigo-600 text-white'
+                  : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700'
               }`}
             >
               {t('split.' + m)}
@@ -342,7 +344,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
       </Field>
 
       <div>
-        <p className="text-sm font-medium text-gray-700 mb-1">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           {method === 'exact' ? t('expenseForm.participantsExact') : t('expenseForm.participants')}
         </p>
         <TextInput
@@ -352,7 +354,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
           aria-label={t('expenseForm.searchMembers')}
           className="mb-2"
         />
-        <div className="border border-gray-200 rounded-md divide-y divide-gray-100 max-h-64 overflow-y-auto">
+        <div className="border border-gray-200 dark:border-gray-800 rounded-md divide-y divide-gray-100 dark:divide-gray-800 max-h-64 overflow-y-auto">
           {visibleMembers.map((m) => {
             const on = selected.has(m.id)
             return (
@@ -361,10 +363,10 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
                   type="checkbox"
                   checked={on}
                   onChange={() => toggle(m.id)}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
                   aria-label={t('expenseForm.include', { name: m.display_name })}
                 />
-                <span className={`flex-1 text-sm ${on ? 'text-gray-800' : 'text-gray-400'}`}>{m.display_name}</span>
+                <span className={`flex-1 text-sm ${on ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}`}>{m.display_name}</span>
                 {on && method === 'weighted' ? (
                   <TextInput
                     value={weights[m.id] ?? ''}
@@ -384,7 +386,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
                   />
                 ) : null}
                 {on && (method === 'equal' || method === 'weighted') && !('error' in (preview ?? {})) ? (
-                  <span className="text-sm text-gray-500 tabular-nums w-24 text-right">
+                  <span className="text-sm text-gray-500 dark:text-gray-400 tabular-nums w-24 text-right">
                     {formatMoney((preview as SplitPreviewRow[]).find((r) => r.user_id === m.id)?.share ?? '0', currency, locale)}
                   </span>
                 ) : null}
@@ -395,7 +397,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
       </div>
 
       {method === 'exact' && exactTotal !== null ? (
-        <p className={`text-sm ${exactBalanced ? 'text-emerald-700' : 'text-red-600'}`}>
+        <p className={`text-sm ${exactBalanced ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
           {t('expenseForm.sharesTotal', { total: formatMoney(exactTotal, currency, locale) })}
           {exactBalanced
             ? t('expenseForm.matchesAmount')
@@ -407,10 +409,10 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
       ) : null}
 
       {!initial ? (
-        <div className="rounded-md border border-gray-200 p-3 space-y-2">
+        <div className="rounded-md border border-gray-200 dark:border-gray-800 p-3 space-y-2">
           <div className="flex items-baseline justify-between gap-2">
-            <p className="text-sm font-medium text-gray-700">{t('expenseForm.receipt')}</p>
-            <p className="text-xs text-gray-500">{t('expenseForm.receiptHint')}</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('expenseForm.receipt')}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{t('expenseForm.receiptHint')}</p>
           </div>
           <input
             ref={pendingInputRef}
@@ -423,9 +425,9 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
           {pendingPreview ? (
             <>
               {isPendingImage ? (
-                <img src={pendingPreview} alt={t('receipt.file')} className="max-h-48 rounded-md border border-gray-200" />
+                <img src={pendingPreview} alt={t('receipt.file')} className="max-h-48 rounded-md border border-gray-200 dark:border-gray-800" />
               ) : (
-                <iframe src={pendingPreview} title={t('receipt.file')} className="h-48 w-full rounded-md border border-gray-200" />
+                <iframe src={pendingPreview} title={t('receipt.file')} className="h-48 w-full rounded-md border border-gray-200 dark:border-gray-800" />
               )}
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="secondary" onClick={() => pendingInputRef.current?.click()}>
@@ -444,18 +446,18 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
               {t('receipt.attach')}
             </Button>
           )}
-          {receiptError ? <p className="text-xs text-red-600">{receiptError}</p> : null}
+          {receiptError ? <p className="text-xs text-red-600 dark:text-red-400">{receiptError}</p> : null}
         </div>
       ) : null}
 
       {initial && attachment ? (
-        <div className="rounded-md border border-gray-200 p-3 space-y-2">
-          <p className="text-sm font-medium text-gray-700">{t('expenseForm.currentReceipt')}</p>
+        <div className="rounded-md border border-gray-200 dark:border-gray-800 p-3 space-y-2">
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('expenseForm.currentReceipt')}</p>
           {previewUrl ? (
             isPreviewImage ? (
-              <img src={previewUrl} alt={t('receipt.file')} className="max-h-48 rounded-md border border-gray-200" />
+              <img src={previewUrl} alt={t('receipt.file')} className="max-h-48 rounded-md border border-gray-200 dark:border-gray-800" />
             ) : (
-              <iframe src={previewUrl} title={t('receipt.file')} className="h-48 w-full rounded-md border border-gray-200" />
+              <iframe src={previewUrl} title={t('receipt.file')} className="h-48 w-full rounded-md border border-gray-200 dark:border-gray-800" />
             )
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
@@ -482,7 +484,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
               {t('receipt.remove')}
             </Button>
           </div>
-          {receiptError ? <p className="text-xs text-red-600">{receiptError}</p> : null}
+          {receiptError ? <p className="text-xs text-red-600 dark:text-red-400">{receiptError}</p> : null}
         </div>
       ) : null}
 
@@ -510,13 +512,13 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
           {isPreviewImage ? (
             <img src={previewUrl} alt={t('receipt.file')} className="mx-auto max-h-[70vh] w-auto rounded-md" />
           ) : (
-            <iframe src={previewUrl} title={t('receipt.file')} className="h-[70vh] w-full rounded-md border border-gray-200" />
+            <iframe src={previewUrl} title={t('receipt.file')} className="h-[70vh] w-full rounded-md border border-gray-200 dark:border-gray-800" />
           )}
         </Modal>
       ) : null}
       {confirmRemoveReceipt ? (
         <Modal title={t('receipt.removeModalTitle')} onClose={() => setConfirmRemoveReceipt(false)}>
-          <p className="text-sm text-gray-700">{t('receipt.removeModalBody')}</p>
+          <p className="text-sm text-gray-700 dark:text-gray-300">{t('receipt.removeModalBody')}</p>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="secondary" onClick={() => setConfirmRemoveReceipt(false)}>
               {t('common.cancel')}

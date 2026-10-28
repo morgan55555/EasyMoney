@@ -17,6 +17,7 @@ import { useI18n } from '../i18n'
 import { formatMoney, formatSigned } from '../lib/money'
 import { useGroupBalances, useMe } from '../query/queries'
 import { balanceClass, Button, Card, CardHeader, EmptyState, Spinner } from './ui'
+import { Avatar } from './Avatar'
 import { ProposeModal } from './ProposeModal'
 
 export function BalancesPanel({ groupId }: { groupId: number }) {
@@ -29,6 +30,14 @@ export function BalancesPanel({ groupId }: { groupId: number }) {
     () =>
       new Map(
         (balances.data?.balances ?? []).map((b) => [b.user_id, b.display_name]),
+      ),
+    [balances.data],
+  )
+
+  const avatarById = useMemo(
+    () =>
+      new Map(
+        (balances.data?.balances ?? []).map((b) => [b.user_id, b.avatar_url]),
       ),
     [balances.data],
   )
@@ -47,11 +56,11 @@ export function BalancesPanel({ groupId }: { groupId: number }) {
       {/* Your position at a glance. */}
       <Card className="p-4 flex items-center justify-between">
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('balances.your')}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('balances.your')}</p>
           <p className={`text-2xl font-semibold tabular-nums ${balanceClass(myBalance)}`}>
             {formatSigned(myBalance, data.currency, locale)}
           </p>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
             {settled
               ? t('balances.settledAll')
               : myBalance.startsWith('-')
@@ -77,14 +86,17 @@ export function BalancesPanel({ groupId }: { groupId: number }) {
           {/* Per-member balances. */}
           <Card>
             <CardHeader title={t('balances.memberBalances')} />
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-gray-100 dark:divide-gray-800">
               {data.balances.map((b) => (
-                <li key={b.user_id} className="flex items-center justify-between px-4 py-2.5">
-                  <span className="text-sm text-gray-800">
-                    {b.display_name}
-                    {b.user_id === meId ? <span className="text-xs text-gray-400"> ({t('common.you')})</span> : null}
+                <li key={b.user_id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <span className="text-sm text-gray-800 dark:text-gray-100 flex items-center gap-2 min-w-0">
+                    <Avatar url={b.avatar_url} name={b.display_name} size={24} />
+                    <span className="truncate">
+                      {b.display_name}
+                      {b.user_id === meId ? <span className="text-xs text-gray-400 dark:text-gray-500"> ({t('common.you')})</span> : null}
+                    </span>
                   </span>
-                  <span className={`text-sm font-medium tabular-nums ${balanceClass(b.balance)}`}>
+                  <span className={`text-sm font-medium tabular-nums shrink-0 ${balanceClass(b.balance)}`}>
                     {formatSigned(b.balance, data.currency, locale)}
                   </span>
                 </li>
@@ -95,20 +107,34 @@ export function BalancesPanel({ groupId }: { groupId: number }) {
           {/* Suggested transfers (the optimizer). */}
           <Card>
             <CardHeader title={t('balances.suggested')} />
-            <p className="px-4 pt-2 text-xs text-gray-500">{t('balances.suggestedHint')}</p>
+            <p className="px-4 pt-2 text-xs text-gray-500 dark:text-gray-400">{t('balances.suggestedHint')}</p>
             {data.transfers.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-500">{t('balances.noTransfers')}</p>
+              <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{t('balances.noTransfers')}</p>
             ) : (
-              <ul className="divide-y divide-gray-100 mt-2">
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800 mt-2">
                 {data.transfers.map((tr, i) => (
                   <li key={i} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                    <span className="text-sm text-gray-800 min-w-0 truncate">
-                      {nameById.get(tr.from_user_id) ?? t('common.userById', { id: tr.from_user_id })}
-                      <span className="text-gray-400"> → </span>
-                      {nameById.get(tr.to_user_id) ?? t('common.userById', { id: tr.to_user_id })}
+                    <span className="text-sm text-gray-800 dark:text-gray-100 min-w-0 flex items-center gap-1.5">
+                      <Avatar
+                        url={avatarById.get(tr.from_user_id) ?? null}
+                        name={nameById.get(tr.from_user_id) ?? `#${tr.from_user_id}`}
+                        size={20}
+                      />
+                      <span className="truncate">
+                        {nameById.get(tr.from_user_id) ?? t('common.userById', { id: tr.from_user_id })}
+                      </span>
+                      <span className="text-gray-400 dark:text-gray-500">→</span>
+                      <Avatar
+                        url={avatarById.get(tr.to_user_id) ?? null}
+                        name={nameById.get(tr.to_user_id) ?? `#${tr.to_user_id}`}
+                        size={20}
+                      />
+                      <span className="truncate">
+                        {nameById.get(tr.to_user_id) ?? t('common.userById', { id: tr.to_user_id })}
+                      </span>
                     </span>
                     <span className="flex items-center gap-3 shrink-0">
-                      <span className="text-sm font-medium tabular-nums text-gray-900">
+                      <span className="text-sm font-medium tabular-nums text-gray-900 dark:text-gray-50">
                         {formatMoney(tr.amount, data.currency, locale)}
                       </span>
                       {tr.from_user_id === meId ? (
@@ -130,17 +156,31 @@ export function BalancesPanel({ groupId }: { groupId: number }) {
           <Card>
             <CardHeader title={t('balances.whoOwesWhom')} />
             {data.pairs.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-500">{t('balances.noDebts')}</p>
+              <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{t('balances.noDebts')}</p>
             ) : (
-              <ul className="divide-y divide-gray-100">
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
                 {data.pairs.map((p, i) => (
-                  <li key={i} className="flex items-center justify-between px-4 py-2">
-                    <span className="text-sm text-gray-700">
-                      {nameById.get(p.from_user_id) ?? t('common.userById', { id: p.from_user_id })}
-                      <span className="text-gray-400"> → </span>
-                      {nameById.get(p.to_user_id) ?? t('common.userById', { id: p.to_user_id })}
+                  <li key={i} className="flex items-center justify-between gap-3 px-4 py-2">
+                    <span className="text-sm text-gray-700 dark:text-gray-200 min-w-0 flex items-center gap-1.5">
+                      <Avatar
+                        url={avatarById.get(p.from_user_id) ?? null}
+                        name={nameById.get(p.from_user_id) ?? `#${p.from_user_id}`}
+                        size={20}
+                      />
+                      <span className="truncate">
+                        {nameById.get(p.from_user_id) ?? t('common.userById', { id: p.from_user_id })}
+                      </span>
+                      <span className="text-gray-400 dark:text-gray-500">→</span>
+                      <Avatar
+                        url={avatarById.get(p.to_user_id) ?? null}
+                        name={nameById.get(p.to_user_id) ?? `#${p.to_user_id}`}
+                        size={20}
+                      />
+                      <span className="truncate">
+                        {nameById.get(p.to_user_id) ?? t('common.userById', { id: p.to_user_id })}
+                      </span>
                     </span>
-                    <span className="text-sm tabular-nums text-gray-900">
+                    <span className="text-sm tabular-nums text-gray-900 dark:text-gray-50 shrink-0">
                       {formatMoney(p.amount, data.currency, locale)}
                     </span>
                   </li>

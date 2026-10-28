@@ -84,7 +84,7 @@ export function NotificationsBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="relative text-gray-500 hover:text-gray-800 p-1"
+        className="relative text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 p-1"
         aria-label={
           t('notif.title') + (unread ? ` (${t('notif.unread', { n: unread > 99 ? '99+' : unread })})` : '')
         }
@@ -104,14 +104,14 @@ export function NotificationsBell() {
       </button>
 
       {open ? (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-gray-200 rounded-lg shadow-lg z-40">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
-            <span className="text-sm font-semibold text-gray-800">{t('notif.title')}</span>
+        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg z-40">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-800">
+            <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">{t('notif.title')}</span>
             {unread > 0 ? (
               <button
                 onClick={() => void markRead.mutate()}
                 disabled={markRead.isPending}
-                className="text-xs text-indigo-600 hover:text-indigo-800"
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
               >
                 {t('notif.markRead')}
               </button>
@@ -119,17 +119,17 @@ export function NotificationsBell() {
           </div>
           <div className="max-h-96 overflow-y-auto">
             {notifications.isPending ? (
-              <p className="text-sm text-gray-500 px-3 py-4">{t('notif.loading')}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 px-3 py-4">{t('notif.loading')}</p>
             ) : items.length === 0 ? (
-              <p className="text-sm text-gray-500 px-3 py-4">{t('notif.empty')}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 px-3 py-4">{t('notif.empty')}</p>
             ) : (
               items.map((n) => (
                 <div
                   key={n.id}
-                  className={`px-3 py-2 border-b border-gray-100 last:border-0 ${n.read_at ? 'text-gray-500' : 'bg-indigo-50/50 text-gray-800'}`}
+                  className={`px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 ${n.read_at ? 'text-gray-500 dark:text-gray-400' : 'bg-indigo-50/50 dark:bg-indigo-950/40 text-gray-800 dark:text-gray-100'}`}
                 >
                   <p className="text-sm">{describe(n.type, n.payload)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{relativeTime(n.created_at, locale)}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{relativeTime(n.created_at, locale)}</p>
                 </div>
               ))
             )}

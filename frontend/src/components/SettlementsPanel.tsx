@@ -23,6 +23,7 @@ import {
   useSettlements,
 } from '../query/queries'
 import type { SettlementOut, SettlementState } from '../types'
+import { Avatar } from './Avatar'
 import { Badge, Button, Card, CardHeader, EmptyState, Modal, Spinner } from './ui'
 import { ProposeModal } from './ProposeModal'
 
@@ -64,7 +65,7 @@ export function SettlementsPanel({ groupId }: { groupId: number }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-800">{t('payments.title')}</h2>
+        <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{t('payments.title')}</h2>
         <Button onClick={() => setShowPropose(true)} disabled={closed}>
           {t('payments.proposeNew')}
         </Button>
@@ -73,19 +74,23 @@ export function SettlementsPanel({ groupId }: { groupId: number }) {
       <Card>
         <CardHeader title={t('payments.pendingTitle')} />
         {pending.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-gray-500">{t('payments.noPending')}</p>
+          <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{t('payments.noPending')}</p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {pending.map((s) => (
               <li key={s.id} className="px-4 py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm text-gray-800 truncate">
-                    {s.from_name} <span className="text-gray-400">→</span> {s.to_name}
-                    <span className="ml-2 font-medium tabular-nums">
+                  <p className="text-sm text-gray-800 dark:text-gray-100 flex items-center gap-1.5">
+                    <Avatar url={s.from_avatar_url} name={s.from_name} size={18} />
+                    <span className="truncate">{s.from_name}</span>
+                    <span className="text-gray-400 dark:text-gray-500 shrink-0">→</span>
+                    <Avatar url={s.to_avatar_url} name={s.to_name} size={18} />
+                    <span className="truncate">{s.to_name}</span>
+                    <span className="ml-1 font-medium tabular-nums shrink-0">
                       {formatMoney(s.amount, currency, locale)}
                     </span>
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                     {s.from_user_id === meId ? t('payments.youProposed') : t('payments.waitingYou')}
                     {' · '}
                     {formatDateTime(s.created_at, locale)}
@@ -131,15 +136,19 @@ export function SettlementsPanel({ groupId }: { groupId: number }) {
       {history.length > 0 ? (
         <Card>
           <CardHeader title={t('payments.historyTitle')} />
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {history.map((s) => (
               <li key={s.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
-                <span className="text-sm text-gray-700 min-w-0 truncate">
-                  {s.from_name} <span className="text-gray-400">→</span> {s.to_name}
-                  <span className="ml-2 tabular-nums">{formatMoney(s.amount, currency, locale)}</span>
+                <span className="text-sm text-gray-700 dark:text-gray-200 min-w-0 flex items-center gap-1.5">
+                  <Avatar url={s.from_avatar_url} name={s.from_name} size={18} />
+                  <span className="truncate">{s.from_name}</span>
+                  <span className="text-gray-400 dark:text-gray-500 shrink-0">→</span>
+                  <Avatar url={s.to_avatar_url} name={s.to_name} size={18} />
+                  <span className="truncate">{s.to_name}</span>
+                  <span className="ml-1 tabular-nums shrink-0">{formatMoney(s.amount, currency, locale)}</span>
                 </span>
                 <span className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
                     {s.confirmed_at ? formatDateTime(s.confirmed_at, locale) : formatDateTime(s.created_at, locale)}
                   </span>
                   <Badge tone={STATE_TONE[s.state]}>{t('state.' + s.state)}</Badge>
@@ -167,7 +176,7 @@ export function SettlementsPanel({ groupId }: { groupId: number }) {
 
       {acting ? (
         <Modal title={t('payments.confirmModalTitle')} onClose={() => setActing(null)}>
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
             {t('payments.confirmModalBody', {
               name: acting.from_name,
               amount: formatMoney(acting.amount, currency, locale),

@@ -14,6 +14,7 @@ import { useI18n, type TFunc } from '../i18n'
 import { formatMoney } from '../lib/money'
 import { relativeTime } from '../lib/dates'
 import { Button, Card, CardHeader, EmptyState, Spinner } from './ui'
+import { Avatar } from './Avatar'
 import { useFeed } from '../query/queries'
 
 function makeDescribe(t: TFunc, locale: string) {
@@ -86,21 +87,25 @@ export function FeedPanel({ groupId }: { groupId: number }) {
   return (
     <Card>
       <CardHeader title={t('feed.title')} />
-      <ol className="divide-y divide-gray-100">
+      <ol className="divide-y divide-gray-100 dark:divide-gray-800">
         {feed.items.map((e) => (
           <li key={e.id} className="px-4 py-2.5 flex items-start gap-3">
-            <span className="mt-1 h-2 w-2 rounded-full bg-indigo-400 shrink-0" aria-hidden="true" />
+            {e.actor_avatar_url ? (
+              <Avatar url={e.actor_avatar_url} name={e.actor_name ?? t('common.someone')} size={24} />
+            ) : (
+              <span className="mt-1 h-2 w-2 rounded-full bg-indigo-400 shrink-0" aria-hidden="true" />
+            )}
             <div className="min-w-0">
-              <p className="text-sm text-gray-800">
+              <p className="text-sm text-gray-800 dark:text-gray-100">
                 {describe(e.type, e.payload, e.actor_name ?? t('common.someone'))}
               </p>
-              <p className="text-xs text-gray-400 mt-0.5">{relativeTime(e.created_at, locale)}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{relativeTime(e.created_at, locale)}</p>
             </div>
           </li>
         ))}
       </ol>
       {feed.hasMore ? (
-        <div className="px-4 py-3 text-center border-t border-gray-100">
+        <div className="px-4 py-3 text-center border-t border-gray-100 dark:border-gray-800">
           <Button variant="ghost" onClick={feed.loadMore} busy={feed.loadingMore}>
             {t('feed.loadOlder')}
           </Button>

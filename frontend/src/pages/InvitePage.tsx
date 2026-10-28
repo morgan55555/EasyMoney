@@ -45,13 +45,13 @@ export function InvitePage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="relative min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
       <div className="absolute right-4 top-4">
         <LanguageSwitcher />
       </div>
       <Card className="p-6 w-full max-w-md space-y-4 text-center">
-        <h1 className="text-lg font-bold text-gray-900">{t('invite.title')}</h1>
-        <p className="text-sm text-gray-600">
+        <h1 className="text-lg font-bold text-gray-900 dark:text-gray-50">{t('invite.title')}</h1>
+        <p className="text-sm text-gray-600 dark:text-gray-300">
           {t('invite.text')}
           {authenticated ? t('invite.textAuthed') : ''}
         </p>
@@ -61,7 +61,7 @@ export function InvitePage() {
             {state === 'joining' ? (
               <Spinner label={t('invite.joining')} />
             ) : state === 'done' ? (
-              <p className="text-sm text-emerald-700 font-medium">{t('invite.joined')}</p>
+              <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">{t('invite.joined')}</p>
             ) : (
               <Button onClick={() => void join()} className="w-full">
                 {t('invite.join')}
@@ -71,7 +71,7 @@ export function InvitePage() {
           </>
         ) : (
           <div className="space-y-2">
-            <p className="text-xs text-gray-500">{t('invite.needAccount')}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{t('invite.needAccount')}</p>
             <Link to={`/register?next=${encodeURIComponent(`/invite/${token}`)}`} className="block">
               <Button className="w-full">{t('invite.registerJoin')}</Button>
             </Link>
@@ -83,7 +83,7 @@ export function InvitePage() {
           </div>
         )}
 
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-gray-400 dark:text-gray-500">
           {authenticated && state !== 'done' && state !== 'joining' ? (
             <Link to="/" className="hover:underline">
               {t('overview.back')}

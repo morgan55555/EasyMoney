@@ -4,6 +4,15 @@
  * `Intl.PluralRules`. The choice is persisted in localStorage and applied to
  * <html lang>. Components call `useI18n()`; outside the provider (e.g. in
  * unit tests) the context defaults to English.
+ *
+ * UI language vs. preferred language (AGENTS.md §2.13):
+ *   - The **UI language** is a client preference (localStorage). The header
+ *     switcher changes it via `setLang`, which marks the choice `manual`.
+ *   - The user's **preferred_language** (a server-side profile field) is the
+ *     *default*: when the user has made no manual choice, the app adopts the
+ *     preferred language via `applyPreferred` (which never marks manual, so a
+ *     later manual choice still wins). On load: manual choice → else
+ *     preferred → else `en`.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -50,52 +59,91 @@ interface I18nValue {
   /** BCP-47 tag for Intl formatting: 'en-US' | 'ru-RU'. */
   locale: string
   t: TFunc
+  /** Whether the user has made an explicit UI-language choice (switcher). */
+  manual: boolean
+  /** User action: set the UI language and remember it as a manual choice. */
   setLang: (lang: Lang) => void
+  /** Server default: adopt a language without marking it manual (idempotent). */
+  applyPreferred: (lang: Lang) => void
 }
 
 const STORAGE_KEY = 'easymoney.lang'
+
+interface StoredLang {
+  lang: Lang
+  manual: boolean
+}
+
+function readStored(): StoredLang {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      if (raw === 'en' || raw === 'ru') {
+        // Legacy value (written before the manual flag existed) — a stored
+        // value means the user chose it, so treat it as manual.
+        return { lang: raw, manual: true }
+      }
+      const parsed = JSON.parse(raw) as Partial<StoredLang>
+      if (parsed.lang === 'en' || parsed.lang === 'ru') {
+        return { lang: parsed.lang, manual: parsed.manual === true }
+      }
+    }
+  } catch {
+    // localStorage unavailable (private mode / tests) — fall through.
+  }
+  return { lang: 'en', manual: false }
+}
+
+function persist(stored: StoredLang): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
+  } catch {
+    // Non-fatal: the choice just won't persist.
+  }
+}
 
 const defaultValue: I18nValue = {
   lang: 'en',
   locale: 'en-US',
   t: makeT(en),
+  manual: false,
   setLang: () => {},
-}
-
-function initialLang(): Lang {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'en' || stored === 'ru') return stored
-  } catch {
-    // localStorage unavailable (private mode / tests) — fall through.
-  }
-  return 'en'
+  applyPreferred: () => {},
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(initialLang)
+  const [state, setState] = useState<StoredLang>(readStored)
 
-  const setLang = useCallback((next: Lang) => {
-    setLangState(next)
-    try {
-      localStorage.setItem(STORAGE_KEY, next)
-    } catch {
-      // Non-fatal: the choice just won't persist.
-    }
+  const setLang = useCallback((lang: Lang) => {
+    const next: StoredLang = { lang, manual: true }
+    persist(next)
+    setState(next)
+  }, [])
+
+  const applyPreferred = useCallback((lang: Lang) => {
+    setState((prev) => {
+      // Never overwrite a manual choice; skip the write when unchanged.
+      if (prev.manual || prev.lang === lang) return prev
+      const next: StoredLang = { lang, manual: false }
+      persist(next)
+      return next
+    })
   }, [])
 
   useEffect(() => {
-    document.documentElement.lang = lang
-  }, [lang])
+    document.documentElement.lang = state.lang
+  }, [state.lang])
 
   const value = useMemo<I18nValue>(
     () => ({
-      lang,
-      locale: lang === 'ru' ? 'ru-RU' : 'en-US',
-      t: makeT(lang === 'ru' ? ru : en),
+      lang: state.lang,
+      locale: state.lang === 'ru' ? 'ru-RU' : 'en-US',
+      t: makeT(state.lang === 'ru' ? ru : en),
+      manual: state.manual,
       setLang,
+      applyPreferred,
     }),
-    [lang, setLang],
+    [state.lang, state.manual, setLang, applyPreferred],
   )
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
@@ -103,7 +151,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
 const I18nContext = createContext<I18nValue>(defaultValue)
 
-/** Current language, locale tag, translator and setter. Safe outside the provider (defaults to EN). */
+/** Current language, locale tag, translator and setters. Safe outside the provider (defaults to EN). */
 export function useI18n(): I18nValue {
   return useContext(I18nContext)
 }

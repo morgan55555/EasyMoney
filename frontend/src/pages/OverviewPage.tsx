@@ -24,8 +24,8 @@ export function OverviewPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">{t('overview.title')}</h1>
-        <p className="text-sm text-gray-500 mt-1">{t('overview.sub')}</p>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50">{t('overview.title')}</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('overview.sub')}</p>
       </div>
 
       {groupCount === 0 ? (
@@ -39,10 +39,10 @@ export function OverviewPage() {
       ) : (
         <Card>
           <CardHeader title={t('overview.byCurrency')} />
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {rows.map((r) => (
               <li key={r.currency} className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm font-medium text-gray-800">{r.currency}</span>
+                <span className="text-sm font-medium text-gray-800 dark:text-gray-100">{r.currency}</span>
                 <span className={`text-base font-semibold tabular-nums ${balanceClass(r.balance)}`}>
                   {formatSigned(r.balance, r.currency, locale)}
                 </span>
@@ -52,8 +52,8 @@ export function OverviewPage() {
         </Card>
       )}
 
-      <p className="text-xs text-gray-400">
-        <Link to="/" className="text-indigo-600 hover:underline">
+      <p className="text-xs text-gray-400 dark:text-gray-500">
+        <Link to="/" className="text-indigo-600 dark:text-indigo-400 hover:underline">
           {t('overview.back')}
         </Link>
       </p>

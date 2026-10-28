@@ -14,6 +14,7 @@ import { formatDate } from '../lib/dates'
 import { matchesAny } from '../lib/search'
 import { useLeaveGroup, useMembers, useMe, useRemoveMember } from '../query/queries'
 import type { MemberOut } from '../types'
+import { Avatar } from './Avatar'
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorText, IconUserMinus, IconButton, Modal, SearchInput, Spinner } from './ui'
 
 export function PeoplePanel({ groupId }: { groupId: number }) {
@@ -69,18 +70,21 @@ export function PeoplePanel({ groupId }: { groupId: number }) {
             />
           </div>
         ) : null}
-        <ul className="divide-y divide-gray-100">
+        <ul className="divide-y divide-gray-100 dark:divide-gray-800">
           {visible.map((m) => (
             <li key={m.id} className="flex items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm text-gray-800 flex items-center gap-2">
-                  <span className="truncate">{m.display_name}</span>
-                  {m.id === meId ? <span className="text-xs text-gray-400">({t('common.you')})</span> : null}
-                  {m.is_owner ? <Badge tone="indigo">{t('people.owner')}</Badge> : null}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {m.email} · {t('people.joined', { date: formatDate(m.joined_at, locale) })}
-                </p>
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <Avatar url={m.avatar_url} name={m.display_name} size={32} />
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                    <span className="truncate">{m.display_name}</span>
+                    {m.id === meId ? <span className="text-xs text-gray-400 dark:text-gray-500">({t('common.you')})</span> : null}
+                    {m.is_owner ? <Badge tone="indigo">{t('people.owner')}</Badge> : null}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {m.email} · {t('people.joined', { date: formatDate(m.joined_at, locale) })}
+                  </p>
+                </div>
               </div>
               {iAmOwner && m.id !== meId ? (
                 <IconButton title={t('people.remove')} variant="danger" onClick={() => setRemoving(m)}>
@@ -95,7 +99,7 @@ export function PeoplePanel({ groupId }: { groupId: number }) {
 
       {removing ? (
         <Modal title={t('people.removeModalTitle')} onClose={() => setRemoving(null)}>
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
             {t('people.removeModalBody', { name: removing.display_name })}
           </p>
           <div className="flex justify-end gap-2 mt-4">
@@ -120,7 +124,7 @@ export function PeoplePanel({ groupId }: { groupId: number }) {
 
       {confirmLeave ? (
         <Modal title={t('people.leaveModalTitle')} onClose={() => setConfirmLeave(false)}>
-          <p className="text-sm text-gray-700">{t('people.leaveModalBody')}</p>
+          <p className="text-sm text-gray-700 dark:text-gray-300">{t('people.leaveModalBody')}</p>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="secondary" onClick={() => setConfirmLeave(false)}>
               {t('common.cancel')}

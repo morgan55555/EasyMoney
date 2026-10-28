@@ -82,7 +82,7 @@ export function GroupsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">{t('groups.title')}</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50">{t('groups.title')}</h1>
       </div>
 
       <Card>
@@ -140,16 +140,16 @@ export function GroupsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {visible.map((g) => (
                 <Link key={g.id} to={`/groups/${g.id}`} className="block group">
-                  <Card className="p-4 h-full hover:border-indigo-300 transition-colors">
+                  <Card className="p-4 h-full hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-gray-900 truncate group-hover:text-indigo-700">{g.name}</h3>
+                          <h3 className="font-semibold text-gray-900 dark:text-gray-50 truncate group-hover:text-indigo-700 dark:group-hover:text-indigo-400">{g.name}</h3>
                           <Badge tone="gray" className="shrink-0">
                             {g.currency}
                           </Badge>
                         </div>
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                           {t('groups.members', {
                             n: g.member_count,
                             plural: pluralForm(locale, g.member_count, MEMBER_PLURAL[lang]),
@@ -157,7 +157,7 @@ export function GroupsPage() {
                         </p>
                       </div>
                       {g.status === 'closed' ? (
-                        <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5 shrink-0">
+                        <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-full px-2 py-0.5 shrink-0">
                           {t('groups.closed')}
                         </span>
                       ) : null}
@@ -166,7 +166,7 @@ export function GroupsPage() {
                       <span className={`text-lg font-semibold tabular-nums ${balanceClass(g.balance)}`}>
                         {formatSigned(g.balance, g.currency, locale)}
                       </span>
-                      <span className="block text-[11px] text-gray-400">
+                      <span className="block text-[11px] text-gray-400 dark:text-gray-500">
                         {g.balance.startsWith('-')
                           ? t('groups.balanceOwe')
                           : g.balance === '0' || Number(g.balance.replace(/,/g, '')) === 0
@@ -182,7 +182,7 @@ export function GroupsPage() {
         </div>
       )}
 
-      <p className="text-xs text-gray-400">{t('groups.footnote')}</p>
+      <p className="text-xs text-gray-400 dark:text-gray-500">{t('groups.footnote')}</p>
     </div>
   )
 }

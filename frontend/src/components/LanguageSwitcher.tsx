@@ -15,7 +15,7 @@ export function LanguageSwitcher({ className = '' }: { className?: string }) {
       value={lang}
       onChange={(e) => setLang(e.target.value as Lang)}
       aria-label="Language"
-      className={`rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${className}`}
+      className={`rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${className}`}
     >
       <option value="en">{t('lang.en')}</option>
       <option value="ru">{t('lang.ru')}</option>

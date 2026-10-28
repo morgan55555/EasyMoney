@@ -6,8 +6,16 @@
 import { apiFetch, getTokens } from './client'
 import type {
   ActivityPageOut,
+  AdminStatsOut,
+  AdminUserCreateBody,
+  AdminUserOut,
+  AdminUserPatchBody,
   AttachmentOut,
+  AuthStatusOut,
+  AvatarSetResponse,
   CurrencyBalanceOut,
+  EmailChangeResponse,
+  EmailConfirmOut,
   ExpenseCreateBody,
   ExpenseOut,
   ExpenseUpdateBody,
@@ -15,6 +23,7 @@ import type {
   GroupOut,
   InviteOut,
   LoginRequest,
+  MePatchBody,
   MemberOut,
   NotificationListOut,
   ParticipantIn,
@@ -31,12 +40,38 @@ export const authApi = {
     apiFetch<TokenResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }, { isAuthCall: true }),
   logout: (refreshToken: string) =>
     apiFetch<void>('/api/auth/logout', { method: 'POST', body: JSON.stringify({ refresh_token: refreshToken }) }, { isAuthCall: true }),
+  /** Public: whether the registration form should be shown (§2.13). */
+  status: () =>
+    apiFetch<AuthStatusOut>('/api/auth/status', undefined, { isAuthCall: true }),
+  /** Apply a confirmation token (register or change). */
+  confirmEmail: (token: string) =>
+    apiFetch<EmailConfirmOut>('/api/auth/email/confirm', { method: 'POST', body: JSON.stringify({ token }) }, { isAuthCall: true }),
+  /** Resend the user's pending register confirmation (authenticated, 204). */
+  resendConfirmation: () =>
+    apiFetch<void>('/api/auth/email/resend', { method: 'POST' }),
 }
 
 export const meApi = {
   get: () => apiFetch<UserOut>('/api/me'),
-  patch: (display_name: string) =>
-    apiFetch<UserOut>('/api/me', { method: 'PATCH', body: JSON.stringify({ display_name }) }),
+  patch: (body: MePatchBody) =>
+    apiFetch<UserOut>('/api/me', { method: 'PATCH', body: JSON.stringify(body) }),
+  changeEmail: (new_email: string) =>
+    apiFetch<EmailChangeResponse>('/api/me/email/change', { method: 'POST', body: JSON.stringify({ new_email }) }),
+  setAvatar: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return apiFetch<AvatarSetResponse>('/api/me/avatar', { method: 'POST', body: form })
+  },
+  clearAvatar: () => apiFetch<void>('/api/me/avatar', { method: 'DELETE' }),
+}
+
+export const adminApi = {
+  listUsers: () => apiFetch<AdminUserOut[]>('/api/admin/users'),
+  createUser: (body: AdminUserCreateBody) =>
+    apiFetch<AdminUserOut>('/api/admin/users', { method: 'POST', body: JSON.stringify(body) }),
+  patchUser: (id: number, body: AdminUserPatchBody) =>
+    apiFetch<AdminUserOut>(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  stats: () => apiFetch<AdminStatsOut>('/api/admin/stats'),
 }
 
 export const groupsApi = {
@@ -83,13 +118,18 @@ export const expensesApi = {
   deleteReceipt: (id: number) => apiFetch<void>(`/api/expenses/${id}/receipt`, { method: 'DELETE' }),
 }
 
-/** Fetch an attachment with the bearer token (plain <a>/<img> can't set it). */
-export async function fetchAttachmentBlob(attachmentId: number): Promise<Blob> {
-  const res = await fetch(`/api/attachments/${attachmentId}`, {
+/** Fetch a binary resource with the bearer token (plain <a>/<img> can't set it). */
+export async function fetchAuthedBlob(path: string): Promise<Blob> {
+  const res = await fetch(path, {
     headers: { Authorization: `Bearer ${getTokens()?.access ?? ''}` },
   })
-  if (!res.ok) throw new Error(`Could not load the attachment (${res.status})`)
+  if (!res.ok) throw new Error(`Could not load resource (${res.status})`)
   return res.blob()
+}
+
+/** Fetch an attachment with the bearer token. */
+export async function fetchAttachmentBlob(attachmentId: number): Promise<Blob> {
+  return fetchAuthedBlob(`/api/attachments/${attachmentId}`)
 }
 
 export const balancesApi = {

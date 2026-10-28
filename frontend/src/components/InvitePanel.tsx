@@ -83,7 +83,7 @@ export function InvitePanel({ groupId }: { groupId: number }) {
       <Card>
         <CardHeader title={t('invites.title')} />
         <div className="p-4 space-y-4">
-          <p className="text-sm text-gray-600">{t('invites.hint')}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-300">{t('invites.hint')}</p>
 
           <div className="flex flex-wrap gap-2 items-end">
             <Button onClick={() => void createLink()} busy={create.isPending && create.variables?.kind === 'link'}>
@@ -113,22 +113,22 @@ export function InvitePanel({ groupId }: { groupId: number }) {
       <Card>
         <CardHeader title={t('invites.active', { n: active.length })} />
         {active.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-gray-500">{t('invites.noActive')}</p>
+          <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{t('invites.noActive')}</p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {active.map((inv) => (
               <li key={inv.id} className="px-4 py-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex items-center gap-2">
                     <Badge tone={inv.kind === 'link' ? 'indigo' : 'amber'}>{t('inviteKind.' + inv.kind)}</Badge>
-                    {inv.email_to ? <span className="text-sm text-gray-700">{inv.email_to}</span> : null}
+                    {inv.email_to ? <span className="text-sm text-gray-700 dark:text-gray-300">{inv.email_to}</span> : null}
                   </span>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
                     {t('invites.expires', { date: formatDateTime(inv.expires_at, locale) })}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-2 truncate">
+                  <code className="flex-1 text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-2 py-2 truncate">
                     {inv.url}
                   </code>
                   <IconButton
@@ -155,15 +155,15 @@ export function InvitePanel({ groupId }: { groupId: number }) {
       {usedOrRevoked.length > 0 ? (
         <Card>
           <CardHeader title={t('invites.usedRevoked')} />
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {usedOrRevoked.map((inv) => (
               <li key={inv.id} className="px-4 py-2.5 flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2 min-w-0">
                   <Badge tone="gray">{t('inviteKind.' + inv.kind)}</Badge>
                   {inv.email_to ? (
-                    <span className="text-sm text-gray-600 truncate">{inv.email_to}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-300 truncate">{inv.email_to}</span>
                   ) : (
-                    <code className="text-xs text-gray-500 truncate">{inv.url}</code>
+                    <code className="text-xs text-gray-500 dark:text-gray-400 truncate">{inv.url}</code>
                   )}
                 </span>
                 <Badge tone={inv.status === 'used' ? 'green' : 'gray'}>{t('inviteStatus.' + inv.status)}</Badge>

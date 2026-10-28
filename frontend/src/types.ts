@@ -36,6 +36,82 @@ export interface UserOut {
   avatar_url: string | null
 }
 
+// --- Profile / avatar / email confirmation (§2.13) ----------------------------
+
+/** PATCH /me body; both fields optional. */
+export interface MePatchBody {
+  display_name?: string
+  preferred_language?: 'en' | 'ru'
+}
+
+/** POST /me/avatar response. */
+export interface AvatarSetResponse {
+  ok: boolean
+  avatar_url: string
+}
+
+/** GET /auth/status response (§2.13). */
+export interface AuthStatusOut {
+  registration_open: boolean
+}
+
+/** POST /me/email/change response. */
+export interface EmailChangeResponse {
+  /** "changed" (applied) or "confirmation_sent" (awaiting the old address). */
+  status: 'changed' | 'confirmation_sent'
+}
+
+/** POST /auth/email/confirm response. */
+export interface EmailConfirmOut {
+  ok: boolean
+  email: string
+  email_verified: boolean
+}
+
+// --- Admin (§2.13) -------------------------------------------------------------
+
+export interface AdminUserOut {
+  id: number
+  email: string
+  display_name: string
+  is_admin: boolean
+  email_verified: boolean
+  avatar_url: string | null
+  created_at: string
+}
+
+export interface AdminUserCreateBody {
+  email: string
+  password: string
+  display_name?: string
+}
+
+/** PATCH /admin/users/{id} body; all fields optional. */
+export interface AdminUserPatchBody {
+  display_name?: string
+  email?: string
+  password?: string
+  is_admin?: boolean
+}
+
+/** A money total rendered in a single currency (string, §2.12). */
+export interface CurrencyTotalOut {
+  currency: string
+  total: string
+}
+
+export interface AdminStatsOut {
+  users_total: number
+  users_admin: number
+  users_unverified: number
+  groups_active: number
+  groups_closed: number
+  expenses_total: number
+  expenses_by_currency: CurrencyTotalOut[]
+  settlements_by_state: Record<string, number>
+  settlements_confirmed_by_currency: CurrencyTotalOut[]
+}
+
 // --- Groups (§2.9, §2.12) ----------------------------------------------------
 
 export interface GroupOut {

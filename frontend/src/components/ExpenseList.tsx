@@ -12,6 +12,7 @@ import { formatMoney } from '../lib/money'
 import { matchesAny } from '../lib/search'
 import { useDeleteExpense, useExpenses, useGroup, useMembers, useMe } from '../query/queries'
 import type { ExpenseOut } from '../types'
+import { Avatar } from './Avatar'
 import { Button, Card, EmptyState, IconEdit, IconButton, IconTrash, Modal, SearchInput, Spinner } from './ui'
 import { ExpenseForm } from './ExpenseForm'
 import { ReceiptUpload } from './ReceiptUpload'
@@ -70,7 +71,7 @@ export function ExpenseList({ groupId }: { groupId: number }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-800">{t('expenses.title')}</h2>
+        <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{t('expenses.title')}</h2>
         <Button
           onClick={() => {
             setEditing(null)
@@ -84,7 +85,7 @@ export function ExpenseList({ groupId }: { groupId: number }) {
       </div>
 
       {closed ? (
-        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+        <p className="text-sm text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-md px-3 py-2">
           {t('expenses.closedNote')}
         </p>
       ) : null}
@@ -113,32 +114,38 @@ export function ExpenseList({ groupId }: { groupId: number }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-medium text-gray-900 truncate">{e.description}</h3>
-                      <span className="text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">
+                      <h3 className="font-medium text-gray-900 dark:text-gray-50 truncate">{e.description}</h3>
+                      <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded px-1.5 py-0.5">
                         {categoryLabel(t, e.category)}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {t('expenses.line', {
-                        payer: e.payer,
-                        amount: formatMoney(e.amount, currency, locale),
-                        date: formatDate(e.date, locale),
-                        split: t('splitLine.' + e.split_method),
-                      })}
-                    </p>
-                    {e.comment ? <p className="text-sm text-gray-600 mt-1">{e.comment}</p> : null}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <Avatar url={e.payer_avatar_url} name={e.payer} size={16} />
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {t('expenses.line', {
+                          payer: e.payer,
+                          amount: formatMoney(e.amount, currency, locale),
+                          date: formatDate(e.date, locale),
+                          split: t('splitLine.' + e.split_method),
+                        })}
+                      </span>
+                    </div>
+                    {e.comment ? <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{e.comment}</p> : null}
                   </div>
                   <div className="text-right shrink-0">
-                    <span className="text-lg font-semibold text-gray-900 tabular-nums">
+                    <span className="text-lg font-semibold text-gray-900 dark:text-gray-50 tabular-nums">
                       {formatMoney(e.amount, currency, locale)}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                   {e.participants.map((p) => (
-                    <span key={p.user_id}>
-                      {p.display_name}: <span className="tabular-nums">{formatMoney(p.share, currency, locale)}</span>
+                    <span key={p.user_id} className="flex items-center gap-1.5">
+                      <Avatar url={p.avatar_url} name={p.display_name} size={16} />
+                      <span>
+                        {p.display_name}: <span className="tabular-nums">{formatMoney(p.share, currency, locale)}</span>
+                      </span>
                     </span>
                   ))}
                 </div>
@@ -146,7 +153,7 @@ export function ExpenseList({ groupId }: { groupId: number }) {
                 {/* items-start: the receipt block also reserves a 20px error slot below
                     its buttons, so centering would sink the Edit/Delete icons a half-row.
                     Top-aligning keeps every action on one visual row (no reflow on error). */}
-                <div className="flex flex-wrap items-start justify-between gap-2 pt-1 border-t border-gray-100">
+                <div className="flex flex-wrap items-start justify-between gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
                   <ReceiptUpload expense={e} groupId={groupId} />
                   <div className="flex gap-2">
                     <IconButton
@@ -206,7 +213,7 @@ export function ExpenseList({ groupId }: { groupId: number }) {
 
       {deleting ? (
         <Modal title={t('expenses.deleteModalTitle')} onClose={() => setDeleting(null)}>
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
             {t('expenses.deleteModalBody', {
               desc: deleting.description,
               amount: formatMoney(deleting.amount, currency, locale),

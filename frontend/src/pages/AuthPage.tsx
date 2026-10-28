@@ -15,9 +15,10 @@ import { z } from 'zod'
 
 import { ApiError, setTokens } from '../api/client'
 import { authApi } from '../api/endpoints'
-import { Button, Card, ErrorText, Field, TextInput } from '../components/ui'
+import { Button, Card, ErrorText, Field, Spinner, TextInput } from '../components/ui'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { useI18n } from '../i18n'
+import { useAuthStatus } from '../query/queries'
 
 const loginSchema = z.object({
   email: z.string().min(3).email(),
@@ -37,6 +38,10 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const [params] = useSearchParams()
   const next = params.get('next')
   const { t } = useI18n()
+  const authStatus = useAuthStatus()
+  // While the status is still loading we optimistically assume it is open; a
+  // closed register page shows a spinner until we know either way.
+  const registrationOpen = authStatus.data?.registration_open ?? true
 
   const login = useForm<LoginForm>({ resolver: zodResolver(loginSchema) })
   const register = useForm<RegisterForm>({ resolver: zodResolver(registerSchema) })
@@ -76,18 +81,18 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const nextSuffix = next ? `?next=${encodeURIComponent(next)}` : ''
 
   return (
-    <div className="relative min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="relative min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
       <div className="absolute right-4 top-4">
         <LanguageSwitcher />
       </div>
       <div className="w-full max-w-sm">
         <img src="/icon.png" alt="" className="h-24 w-24 mx-auto mb-4 rounded-2xl shadow-sm" />
-        <h1 className="text-2xl font-bold text-gray-900 text-center mb-1">
-          Easy<span className="text-indigo-600">Money</span>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50 text-center mb-1">
+          Easy<span className="text-indigo-600 dark:text-indigo-400">Money</span>
         </h1>
-        <p className="text-center text-sm text-gray-500 mb-6">{t('auth.tagline')}</p>
+        <p className="text-center text-sm text-gray-500 dark:text-gray-400 mb-6">{t('auth.tagline')}</p>
         <Card className="p-5 space-y-4">
-          <h2 className="font-semibold text-gray-800">
+          <h2 className="font-semibold text-gray-800 dark:text-gray-100">
             {isLogin ? t('auth.loginTitle') : t('auth.registerTitle')}
           </h2>
           <ErrorText>{serverError}</ErrorText>
@@ -102,7 +107,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
                   {...login.register('email')}
                 />
                 {login.formState.errors.email ? (
-                  <span className="text-xs text-red-600">
+                  <span className="text-xs text-red-600 dark:text-red-400">
                     {login.formState.errors.email.type === 'too_small'
                       ? t('auth.errEmail')
                       : t('auth.errEmailInvalid')}
@@ -116,13 +121,26 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
                   {...login.register('password')}
                 />
                 {login.formState.errors.password ? (
-                  <span className="text-xs text-red-600">{t('auth.errPassword')}</span>
+                  <span className="text-xs text-red-600 dark:text-red-400">{t('auth.errPassword')}</span>
                 ) : null}
               </Field>
               <Button type="submit" busy={login.formState.isSubmitting} className="w-full">
                 {t('auth.loginBtn')}
               </Button>
             </form>
+          ) : authStatus.isPending ? (
+            <div className="py-6">
+              <Spinner />
+            </div>
+          ) : !registrationOpen ? (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600 dark:text-gray-300">{t('auth.registerClosed')}</p>
+              <Link to={`/login${nextSuffix}`} className="block">
+                <Button variant="secondary" className="w-full">
+                  {t('auth.loginLink')}
+                </Button>
+              </Link>
+            </div>
           ) : (
             <form onSubmit={onRegister} className="space-y-3" noValidate>
               <Field label={t('auth.email')}>
@@ -133,7 +151,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
                   {...register.register('email')}
                 />
                 {register.formState.errors.email ? (
-                  <span className="text-xs text-red-600">
+                  <span className="text-xs text-red-600 dark:text-red-400">
                     {register.formState.errors.email.type === 'too_small'
                       ? t('auth.errEmail')
                       : t('auth.errEmailInvalid')}
@@ -147,7 +165,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
                   {...register.register('password')}
                 />
                 {register.formState.errors.password ? (
-                  <span className="text-xs text-red-600">
+                  <span className="text-xs text-red-600 dark:text-red-400">
                     {register.formState.errors.password.type === 'too_small'
                       ? t('auth.errPasswordShort')
                       : t('auth.errPassword')}
@@ -167,18 +185,22 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
             </form>
           )}
 
-          <p className="text-sm text-gray-500 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
             {isLogin ? (
-              <>
-                {t('auth.noAccount')}{' '}
-                <Link to={`/register${nextSuffix}`} className="text-indigo-600 hover:underline">
-                  {t('auth.registerLink')}
-                </Link>
-              </>
+              registrationOpen ? (
+                <>
+                  {t('auth.noAccount')}{' '}
+                  <Link to={`/register${nextSuffix}`} className="text-indigo-600 dark:text-indigo-400 hover:underline">
+                    {t('auth.registerLink')}
+                  </Link>
+                </>
+              ) : (
+                <span>{t('auth.registerClosed')}</span>
+              )
             ) : (
               <>
                 {t('auth.hasAccount')}{' '}
-                <Link to={`/login${nextSuffix}`} className="text-indigo-600 hover:underline">
+                <Link to={`/login${nextSuffix}`} className="text-indigo-600 dark:text-indigo-400 hover:underline">
                   {t('auth.loginLink')}
                 </Link>
               </>

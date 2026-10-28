@@ -23,6 +23,8 @@ import { socket } from '../ws/socket'
 import type {
   ActivityEventOut,
   ActivityPageOut,
+  AdminUserCreateBody,
+  AdminUserPatchBody,
   CurrencyBalanceOut,
   ExpenseCreateBody,
   ExpenseOut,
@@ -30,6 +32,7 @@ import type {
   GroupBalancesOut,
   GroupOut,
   InviteOut,
+  MePatchBody,
   MemberOut,
   NotificationListOut,
   SettlementOut,
@@ -50,6 +53,9 @@ export const keys = {
   feed: (id: number, cursor: string | null) => ['group', id, 'feed', cursor] as const,
   notifications: ['notifications'] as const,
   overview: ['balances-all'] as const,
+  authStatus: ['auth-status'] as const,
+  adminUsers: ['admin', 'users'] as const,
+  adminStats: ['admin', 'stats'] as const,
 }
 
 export const queryClient = new QueryClient({
@@ -155,6 +161,19 @@ export function useNotifications(): UseQueryResult<NotificationListOut> {
 
 export function useOverview(): UseQueryResult<CurrencyBalanceOut[]> {
   return useQuery({ queryKey: keys.overview, queryFn: () => api.balancesApi.all() })
+}
+
+/** Public registration status (§2.13); controls the register form on /login. */
+export function useAuthStatus() {
+  return useQuery({ queryKey: keys.authStatus, queryFn: () => api.authApi.status(), staleTime: 60_000 })
+}
+
+export function useAdminUsers() {
+  return useQuery({ queryKey: keys.adminUsers, queryFn: () => api.adminApi.listUsers() })
+}
+
+export function useAdminStats() {
+  return useQuery({ queryKey: keys.adminStats, queryFn: () => api.adminApi.stats() })
 }
 
 /**
@@ -412,8 +431,66 @@ export function useMarkNotificationsRead() {
 export function usePatchMe() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (display_name: string) => api.meApi.patch(display_name),
+    mutationFn: (body: MePatchBody) => api.meApi.patch(body),
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.me }),
+  })
+}
+
+export function useChangeEmail() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (new_email: string) => api.meApi.changeEmail(new_email),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.me }),
+  })
+}
+
+export function useSetAvatar() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) => api.meApi.setAvatar(file),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.me }),
+  })
+}
+
+export function useClearAvatar() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.meApi.clearAvatar(),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.me }),
+  })
+}
+
+/** Apply a confirmation token; refresh /me so email_verified flips. */
+export function useConfirmEmail() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (token: string) => api.authApi.confirmEmail(token),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.me }),
+  })
+}
+
+export function useResendConfirmation() {
+  return useMutation({ mutationFn: () => api.authApi.resendConfirmation() })
+}
+
+export function useAdminCreateUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: AdminUserCreateBody) => api.adminApi.createUser(body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.adminUsers }),
+  })
+}
+
+export function useAdminPatchUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: { id: number; body: AdminUserPatchBody }) => api.adminApi.patchUser(vars.id, vars.body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.adminUsers })
+      void qc.invalidateQueries({ queryKey: keys.adminStats })
+      // The admin may be editing their own account.
+      void qc.invalidateQueries({ queryKey: keys.me })
+    },
   })
 }
 

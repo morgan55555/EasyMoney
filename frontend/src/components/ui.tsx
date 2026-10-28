@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom'
 
 export function Spinner({ label = 'Loading…' }: { label?: string }) {
   return (
-    <div className="flex items-center gap-2 text-gray-500 text-sm py-8 justify-center">
+    <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm py-8 justify-center">
       <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
@@ -23,13 +23,13 @@ export function Spinner({ label = 'Loading…' }: { label?: string }) {
 
 export function ErrorText({ children }: { children: ReactNode }) {
   if (!children) return null
-  return <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">{children}</div>
+  return <div className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-md px-3 py-2">{children}</div>
 }
 
 export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   return (
-    <div className="text-center py-10 text-gray-500">
-      <p className="font-medium text-gray-600">{title}</p>
+    <div className="text-center py-10 text-gray-500 dark:text-gray-400">
+      <p className="font-medium text-gray-600 dark:text-gray-300">{title}</p>
       {hint ? <p className="text-sm mt-1">{hint}</p> : null}
     </div>
   )
@@ -41,9 +41,10 @@ type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
 
 const buttonStyles: Record<ButtonVariant, string> = {
   primary: 'bg-indigo-600 hover:bg-indigo-700 text-white border border-transparent',
-  secondary: 'bg-white hover:bg-gray-50 text-gray-800 border border-gray-300',
+  secondary:
+    'bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-100 dark:border-gray-600',
   danger: 'bg-red-600 hover:bg-red-700 text-white',
-  ghost: 'bg-transparent hover:bg-gray-100 text-gray-700',
+  ghost: 'bg-transparent hover:bg-gray-100 text-gray-700 dark:hover:bg-gray-800 dark:text-gray-200',
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -183,8 +184,10 @@ export function IconSearch({ className }: { className?: string }) {
 type IconButtonVariant = 'secondary' | 'danger'
 
 const iconButtonStyles: Record<IconButtonVariant, string> = {
-  secondary: 'bg-white hover:bg-gray-50 text-gray-600 hover:text-gray-900 border border-gray-300',
-  danger: 'bg-white hover:bg-red-50 text-red-600 hover:text-red-700 border border-red-300',
+  secondary:
+    'bg-white hover:bg-gray-50 text-gray-600 hover:text-gray-900 border border-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 dark:hover:text-gray-100 dark:border-gray-600',
+  danger:
+    'bg-white hover:bg-red-50 text-red-600 hover:text-red-700 border border-red-300 dark:bg-gray-800 dark:hover:bg-red-950/40 dark:text-red-400 dark:hover:text-red-300 dark:border-red-900',
 }
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -220,14 +223,14 @@ export function IconButton({
 // --- Form fields -----------------------------------------------------------------
 
 const fieldBase =
-  'block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white'
+  'block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-800'
 
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="block">
-      <span className="block text-sm font-medium text-gray-700 mb-1">{label}</span>
+      <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</span>
       {children}
-      {hint ? <span className="block text-xs text-gray-500 mt-1">{hint}</span> : null}
+      {hint ? <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">{hint}</span> : null}
     </label>
   )
 }
@@ -276,7 +279,7 @@ export function SearchInput({
 }) {
   return (
     <div className={`relative ${className}`}>
-      <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+      <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
       <input
         type="search"
         value={value}
@@ -290,7 +293,7 @@ export function SearchInput({
           type="button"
           onClick={() => onChange('')}
           aria-label={clearLabel}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-lg leading-none text-gray-400 hover:text-gray-600"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-lg leading-none text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
         >
           ×
         </button>
@@ -311,11 +314,11 @@ export function Badge({
   className?: string
 }) {
   const tones: Record<string, string> = {
-    gray: 'bg-gray-100 text-gray-700',
-    green: 'bg-emerald-100 text-emerald-800',
-    red: 'bg-red-100 text-red-800',
-    amber: 'bg-amber-100 text-amber-800',
-    indigo: 'bg-indigo-100 text-indigo-800',
+    gray: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+    green: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+    red: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
+    amber: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+    indigo: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300',
   }
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tones[tone]} ${className}`}>{children}</span>
@@ -325,13 +328,13 @@ export function Badge({
 // --- Card -------------------------------------------------------------------------
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`bg-white border border-gray-200 rounded-lg shadow-sm ${className}`}>{children}</div>
+  return <div className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm ${className}`}>{children}</div>
 }
 
 export function CardHeader({ title, actions }: { title: string; actions?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-      <h2 className="text-sm font-semibold text-gray-800">{title}</h2>
+    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+      <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</h2>
       {actions}
     </div>
   )
@@ -374,15 +377,15 @@ export function Modal({
       }}
     >
       <div
-        className={`bg-white rounded-lg shadow-xl w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-full flex flex-col`}
+        className={`bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-full flex flex-col`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-gray-200">
-          <h2 className="text-sm font-semibold text-gray-800">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Close">
+        <div className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+          <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 text-xl leading-none" aria-label="Close">
             ×
           </button>
         </div>
@@ -406,7 +409,7 @@ export function balanceTone(value: string): 'positive' | 'negative' | 'zero' {
 
 export function balanceClass(value: string): string {
   const tone = balanceTone(value)
-  if (tone === 'positive') return 'text-emerald-700'
-  if (tone === 'negative') return 'text-red-600'
-  return 'text-gray-500'
+  if (tone === 'positive') return 'text-emerald-700 dark:text-emerald-400'
+  if (tone === 'negative') return 'text-red-600 dark:text-red-400'
+  return 'text-gray-500 dark:text-gray-400'
 }

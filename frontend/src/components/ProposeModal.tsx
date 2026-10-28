@@ -83,14 +83,14 @@ export function ProposeModal({ groupId, meId, balances, initialTo, initialAmount
   return (
     <Modal title={t('propose.title')} onClose={onClose}>
       <div className="space-y-4">
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-gray-600 dark:text-gray-300">
           {t('propose.body1')}
           <span className="font-medium">{t('propose.pendingWord')}</span>
           {t('propose.body2')}
         </p>
 
         {creditors.length === 0 ? (
-          <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+          <p className="text-sm text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-md px-3 py-2">
             {t('propose.oweNoOne')}
           </p>
         ) : (
