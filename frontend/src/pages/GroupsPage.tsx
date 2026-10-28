@@ -45,6 +45,7 @@ const CURRENCIES = [
   'EGP',
   'TRY',
   'UAH',
+  'RUB',
   'RON',
   'BRL',
   'MXN',
