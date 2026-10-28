@@ -28,8 +28,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-easymoney}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-easymoney}
       POSTGRES_DB: ${POSTGRES_DB:-easymoney}
-      POSTGRES_HOST: db
-      POSTGRES_PORT: "5432"
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       DATABASE_URL: ${DATABASE_URL:-}
       # Required when DEBUG is off (the default): the boot guard refuses to
       # start with an empty or weak secret (A-8). .env.example ships a

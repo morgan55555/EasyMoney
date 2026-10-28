@@ -116,7 +116,8 @@ Copy the values from the table below into `.env` (a `.env.example` will ship wit
 | Variable | Default | Meaning |
 |---|---|---|
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `easymoney` / `easymoney` / `easymoney` | DB credentials |
-| `DATABASE_URL` | composed from the three above | Explicit override if needed |
+| `POSTGRES_HOST` / `POSTGRES_PORT` | `db` / `5432` | DB host and port — the backend connects to `POSTGRES_HOST:POSTGRES_PORT` (defaults to the compose service name `db` on `5432`) |
+| `DATABASE_URL` | composed from the `POSTGRES_*` values above | Explicit override if needed |
 | `JWT_SECRET` | placeholder in `.env.example` (replace it) | HMAC secret for JWTs. **Required** — with the default `DEBUG=false` the app refuses to start unless a strong value (≥ 32 chars) is set; only `DEBUG=true` auto-generates one per boot. A weak secret (short or a known dev default) warns in `DEBUG` and fails otherwise. |
 | `JWT_ACCESS_TTL_MIN` | `15` | Access token lifetime |
 | `JWT_REFRESH_TTL_DAYS` | `7` | Refresh token lifetime |
