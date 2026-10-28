@@ -5,6 +5,8 @@
 
 # --- Planning / working docs (local only) ---
 PLAN.md
+TESTING_PLAN.md
+TESTING_RESULTS.md
 
 # --- Python ---
 __pycache__/
