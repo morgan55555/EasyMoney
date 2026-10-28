@@ -125,7 +125,13 @@ async def _issue_confirmation_token(
     target_email: str,
 ) -> EmailToken:
     """Create a pending token, revoke any previous pending one for the same
-    purpose, and mail the confirmation link."""
+    purpose, and mail the confirmation link.
+
+    The link is always mailed to the user's **current** email address: for
+    ``register`` that is the address being verified, and for ``change`` it is
+    the *previous* address (AGENTS.md §2.13, req 26) — the new address only
+    becomes the account's email once the token is confirmed.
+    """
     # Revoke any existing pending token for this user + purpose.
     previous = await db.scalar(
         select(EmailToken).where(
@@ -160,7 +166,7 @@ async def _issue_confirmation_token(
             subject, text, html = mail_service.change_confirmation_message(
                 user.display_name, target_email, token.token, lang=user.preferred_language
             )
-        await mail_service.send_mail(target_email, subject, text, html)
+        await mail_service.send_mail(user.email, subject, text, html)
     except Exception:
         logger.exception(
             "Failed to send confirmation email (user=%s, purpose=%s)", user.id, purpose
