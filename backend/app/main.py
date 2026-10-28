@@ -99,6 +99,89 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ws_hook.set_manager(None)
 
 
+# OpenAPI tag metadata: one documented section per domain (the routers set
+# these tag names; the descriptions give each section context in Swagger/ReDoc).
+_OPENAPI_TAGS: list[dict[str, str]] = [
+    {
+        "name": "meta",
+        "description": "Service health check.",
+    },
+    {
+        "name": "auth",
+        "description": (
+            "Account lifecycle: register, login, token refresh, logout, the "
+            "public registration status, and email confirmation "
+            "(registration + email-change tokens)."
+        ),
+    },
+    {
+        "name": "me",
+        "description": (
+            "The signed-in user's profile: display name, avatar, email change "
+            "(with optional confirmation), preferred language."
+        ),
+    },
+    {
+        "name": "users",
+        "description": "User data other members may read: avatar images.",
+    },
+    {
+        "name": "groups",
+        "description": (
+            "Groups: create, list, members, leave, close/reopen. A group has "
+            "exactly one currency, set at creation."
+        ),
+    },
+    {
+        "name": "feed",
+        "description": (
+            "The group's append-only activity feed (cursor pagination, newest "
+            "first)."
+        ),
+    },
+    {
+        "name": "invites",
+        "description": (
+            "Invitations by link or email: create, list, revoke, and accept "
+            "(joining the group)."
+        ),
+    },
+    {
+        "name": "expenses",
+        "description": (
+            "Expenses: create, edit, delete (soft), equal / share-weighted / "
+            "exact splits (computed server-side, §2.1), and receipt upload."
+        ),
+    },
+    {
+        "name": "notifications",
+        "description": "In-app notifications (the bell): list and mark read.",
+    },
+    {
+        "name": "balances",
+        "description": (
+            "Balances computed on read (§2.2): per group (net balances, "
+            "pairwise debts, suggested transfers ≤ n−1) and across all groups."
+        ),
+    },
+    {
+        "name": "settlements",
+        "description": (
+            "Settlements: propose a payment (pending), then the recipient "
+            "confirms or rejects; the sender may cancel. Balances move only on "
+            "confirmation."
+        ),
+    },
+    {
+        "name": "admin",
+        "description": (
+            "Admin panel: create/edit users without email confirmation and "
+            "platform statistics. The last remaining admin cannot be demoted."
+        ),
+    },
+]
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     # The API docs are opt-in via EXPOSE_API_DOCS: hidden by default so a
@@ -107,7 +190,15 @@ def create_app() -> FastAPI:
     expose_docs = settings.expose_api_docs
     app = FastAPI(
         title="EasyMoney",
-        version="0.01",
+        description=(
+            "Group expense tracking with exact decimal money, server-side "
+            "splits, on-read balances, and live WebSocket updates. Money is "
+            "always serialized as a string with the currency's minor digits; "
+            "no currency conversion anywhere. See AGENTS.md §2 for the exact "
+            "semantics."
+        ),
+        version="0.02",
+        openapi_tags=_OPENAPI_TAGS,
         lifespan=lifespan,
         docs_url="/api/docs" if expose_docs else None,
         redoc_url="/api/redoc" if expose_docs else None,
