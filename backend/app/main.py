@@ -184,9 +184,10 @@ _OPENAPI_TAGS: list[dict[str, str]] = [
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    # The API docs are opt-in via EXPOSE_API_DOCS: hidden by default so a
-    # production deployment does not expose the API surface; enabled by
-    # default in docker compose for local development (README §Environment).
+    # The API docs are opt-in via EXPOSE_API_DOCS (default false, matching the
+    # compose and .env.example defaults): hidden by default so a deployment
+    # does not expose the API surface; set EXPOSE_API_DOCS=true to enable
+    # /api/docs (README §Environment).
     expose_docs = settings.expose_api_docs
     app = FastAPI(
         title="EasyMoney",

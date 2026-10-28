@@ -43,9 +43,9 @@ class Settings(BaseSettings):
     # --- Debug & mail ---
     debug: bool = False
     # Mount the OpenAPI docs (Swagger at /api/docs, ReDoc at /api/redoc, the
-    # spec at /api/openapi.json). Off by default so production deployments
-    # don't expose the full API surface; docker compose defaults it to true
-    # for the one-command dev launch.
+    # spec at /api/openapi.json). Off by default — the app and docker compose
+    # both default it to false — so deployments don't expose the full API
+    # surface; set EXPOSE_API_DOCS=true to enable them (README §Environment).
     expose_api_docs: bool = False
     smtp_host: str | None = None
     smtp_port: int = 1025
