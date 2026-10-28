@@ -2,7 +2,7 @@
  * Small shared UI primitives. Kept dependency-free (plain Tailwind classes).
  */
 
-import { type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes, useEffect } from 'react'
+import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 
 // --- Spinner ------------------------------------------------------------------
@@ -223,17 +223,29 @@ export function Field({ label, children, hint }: { label: string; children: Reac
   )
 }
 
-export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`${fieldBase} ${props.className ?? ''}`} />
-}
+/**
+ * Refs are forwarded so uncontrolled form libraries (e.g. react-hook-form, which
+ * reads the field value from its ref at submit time) work with these wrappers.
+ * Without `forwardRef` the ref is dropped and submit reads `undefined` for every
+ * field, failing validation even when the user typed valid values.
+ */
+export const TextInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  function TextInput(props, ref) {
+    return <input {...props} ref={ref} className={`${fieldBase} ${props.className ?? ''}`} />
+  },
+)
 
-export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={`${fieldBase} ${props.className ?? ''}`} />
-}
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
+  function Select(props, ref) {
+    return <select {...props} ref={ref} className={`${fieldBase} ${props.className ?? ''}`} />
+  },
+)
 
-export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={`${fieldBase} ${props.className ?? ''}`} />
-}
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  function Textarea(props, ref) {
+    return <textarea {...props} ref={ref} className={`${fieldBase} ${props.className ?? ''}`} />
+  },
+)
 
 // --- Badge ------------------------------------------------------------------------
 
