@@ -153,6 +153,36 @@ Reminders apply to **closed groups too** until settled (the close summary is not
 - Serialized strings always carry **exactly `minor_digits` decimals**: `JPY 0 → "0"`, `USD 0 → "0.00"`, `KWD 1.5 → "1.500"`. A zero with no decimal part in a zero-digit currency is correct, not a bug.
 - No conversion between currencies anywhere, including the cross-group view.
 
+### 2.13 Profiles, verification, admin & mail controls
+
+**User profile.** A `User` carries, beyond `email` / `password_hash` / `display_name`:
+- `is_admin: bool` (default `false`) — whether the user may use the admin panel.
+- `email_verified: bool` (default `true`) — whether the address is confirmed.
+- `preferred_language: "en" | "ru"` (default `"en"`) — the language of that user's emails and the default UI language.
+- `avatar_data: text | null` — base64-encoded image (no `data:` prefix).
+- `avatar_content_type: text | null` — e.g. `image/png` (matches `avatar_data`).
+
+**Avatars.** Stored as base64 in the DB. `POST /api/me/avatar` (multipart `file`, image/*, ≤ `MAX_AVATAR_MB`) sets them; `DELETE /api/me/avatar` clears them. `GET /api/users/{id}/avatar` streams the image (any authenticated user; 404 when the user has none). User-list payloads carry only a short `avatar_url` (`/api/users/{id}/avatar`, or `null`) to stay light; the avatar is rendered wherever a username appears (header, members, balances, settlements, feed, participants).
+
+**Registration restriction.** `REGISTRATION_OPEN` (default `true`). When `false`, `POST /api/auth/register` succeeds only while the `users` table is empty (the first user); once any user exists it returns **403**. `GET /api/auth/status` (public) returns `{ registration_open: bool }` = `REGISTRATION_OPEN AND (users table empty)`; the frontend hides the register form when it is `false`. The first-ever registrant on a fresh DB always becomes admin (§ below).
+
+**Registration verification.** Active ⇔ `SMTP_ENABLED AND EMAIL_REGISTER_CONFIRMATION`. When active, a new user is created with `email_verified = false`, a `register` email token is issued and mailed, and login works but the **frontend blocks app access** until `email_verified` is true (full-screen verify prompt with resend). When not active, the user is created with `email_verified = true` immediately. Confirmation tokens live in `email_tokens` (`purpose = "register"`); `POST /api/auth/email/confirm {token}` marks the user verified and the token `used`; `POST /api/auth/email/resend` (authenticated) reissues + resends the user's pending token.
+
+**Email-change confirmation.** Active ⇔ `SMTP_ENABLED AND EMAIL_CHANGE_CONFIRMATION`. `POST /api/me/email/change {new_email}`:
+- active → create a `change` email token, mail the confirmation link to the **previous** address, and return `{ status: "confirmation_sent" }` (the new email is **not** applied yet). `POST /api/auth/email/confirm {token}` then applies the swap and marks the token `used`.
+- not active → apply the new email immediately and return `{ status: "changed" }`.
+Emails are normalized to lowercase; a change to the email already in use is a 409. The target address must be unique among users.
+
+**Confirmation tokens.** One table `email_tokens` serves both confirmations: `id`, `user_id` (FK, CASCADE), `purpose` (`register` | `change`), `token` (URL-safe, unique, 128-bit), `target_email`, `status` (`pending` | `used` | `revoked`), `expires_at` (default `now() + 24h`). A token is valid while `status = "pending"` and unexpired; confirming marks it `used`. Reissuing (resend / new change request) revokes the previous `pending` token.
+
+**Admin model.** The **first-ever registered user** becomes admin (`is_admin = true`); on an existing DB, a migration backfills `is_admin` on the lowest-id user if no admin exists. Admins (any `is_admin` user) may, **without email confirmation**: create users (`POST /api/admin/users`, 409 on duplicate email), and edit any user's `display_name` / `email` / `password` / `is_admin` (`PATCH /api/admin/users/{id}`). Guard: the **last remaining admin cannot be demoted or have their admin bit removed** (lockout protection). Admins get a **statistics** endpoint (`GET /api/admin/stats`).
+
+**Preferred language vs. UI language.** `preferred_language` is a server-side user setting, changed **only** in user settings. It (a) selects the language of that user's outbound emails (EN or RU; recipients without an account, e.g. invitees, default to EN) and (b) is the **default** UI language. The UI language (client, localStorage) is changed by the header switcher and **never** writes `preferred_language`. On page load the UI language resolves to: a stored manual choice if present, else the user's `preferred_language`, else `en`.
+
+**Theme (dark/light/system).** A client-only preference (`light` | `dark` | `system`, default `system`), persisted in localStorage. `darkMode: "class"`: `light`/`dark` apply/remove a `.dark` class on `<html>`; `system` follows `prefers-color-scheme` (via a `matchMedia` listener). Not stored server-side, never part of the API.
+
+**SMTP master switch.** `SMTP_ENABLED` (default `true`) is the kill switch for all outbound mail: when `false`, `send_mail` is a log-only no-op **even when `SMTP_HOST` is set**, and all confirmation flows (registration + email change) are skipped (they apply immediately). `SMTP_HOST` unset → log-only as before. Every mail path still goes through `services/mail.py`.
+
 ## 3. Architecture & conventions
 
 ### 3.1 Backend layout
@@ -238,12 +268,13 @@ Rules:
 ### 3.7 Database
 
 - PostgreSQL 16. Alembic for every schema change (no manual DDL). Money columns `NUMERIC(14,3)`; ids `BIGSERIAL`; money-bearing queries use `NUMERIC` arithmetic only.
-- Indexes: `expenses(group_id, date)`, `expenses.payer`, `expense_participants(expense_id, user_id)`, `settlements(group_id, state)`, `activity(group_id, created_at desc)`, `notifications(user_id, read_at)`, `memberships(group_id, user_id)` unique.
+- Indexes: `expenses(group_id, date)`, `expenses.payer`, `expense_participants(expense_id, user_id)`, `settlements(group_id, state)`, `activity(group_id, created_at desc)`, `notifications(user_id, read_at)`, `memberships(group_id, user_id)` unique, `email_tokens.token` unique, `email_tokens(user_id, purpose)`.
+- Avatars are `text` (base64, no `data:` prefix) + `avatar_content_type`; never on a money column.
 - `Membership.joined_at` is the tie-broken sort key for the split remainder (2.1) — it must be stable; set it in the DB (`now()`), never client-supplied.
 
 ## 4. Environment & running
 
-See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `DEBUG`, `DEBT_OVERDUE_DAYS`, `REMINDER_INTERVAL_DAYS`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `UPLOAD_DIR`, `CORS_ORIGINS`.
+See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `SMTP_ENABLED`, `EMAIL_REGISTER_CONFIRMATION`, `EMAIL_CHANGE_CONFIRMATION`, `REGISTRATION_OPEN`, `MAX_AVATAR_MB`, `DEBUG`, `DEBT_OVERDUE_DAYS`, `REMINDER_INTERVAL_DAYS`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `UPLOAD_DIR`, `CORS_ORIGINS`.
 
 Local dev without Docker (optional): `alembic upgrade head`, `uvicorn app.main:app --reload`, `npm run dev` (Vite proxies `/api`, `/ws` to `:8000`).
 
@@ -263,6 +294,7 @@ A change is done when:
 3. `docker compose up --build` from a clean checkout works without manual steps (migrations auto-run, app on :8081).
 4. New WS event types require: backend emit + event-catalogue entry here + frontend handler.
 5. No money path uses floats (CI: `ruff` rule + grep guard in tests).
+6. **Account/admin tests pass.** `backend/tests/test_accounts.py` must cover: first-ever user becomes admin (and the migration backfills the lowest-id user when none exists); registration restriction (`REGISTRATION_OPEN=false` → 403 once a user exists, `GET /api/auth/status` reflects it); register-confirmation on/off (unverified until confirmed vs. verified immediately); email-change confirmation on/off (token to the old address vs. immediate swap); token lifecycle (confirm marks used, resend revokes the previous pending token, expiry); SMTP kill switch (`SMTP_ENABLED=false` → no send, confirmations skipped); avatar set/clear; admin create/patch (no confirmation, last-admin guard). Frontend: theme manager, i18n preferred-language default, Avatar fallback, settings modal, register-form hiding.
 
 ## 6. Requirements traceability
 
@@ -291,6 +323,15 @@ A change is done when:
 | 21 | Two concurrent expense adds both recorded; group balance sum = 0 | §2.8 + invariants 1–2 |
 | 22 | Closed group: no new expenses, summary email, reopenable | §2.9 |
 | 23 | Sound on new notification | §3.2 (`/alert.mp3` via `lib/sound.ts`, played on `notification.created`) |
+| 24 | Profile settings: name, avatar, email, preferred language | §2.13, §3.6 (Settings modal; `PATCH /me`, avatar + email endpoints) |
+| 25 | Avatars stored as base64 in the DB; shown in header + every username | §2.13 (`users.avatar_data`, `GET /users/{id}/avatar`) |
+| 26 | Email change sends confirmation to the previous address before applying | §2.13 (`EMAIL_CHANGE_CONFIRMATION`, `email_tokens`, `POST /me/email/change`) |
+| 27 | Preferred language drives email language + default UI language; switcher never writes it | §2.13, §3.6 (i18n preferred-default) |
+| 28 | Dark/light/browser theme (default browser) | §2.13, §3.6 (ThemeManager, `darkMode:"class"`) |
+| 29 | Optional email confirmation after registration (separate env from change confirmation) | §2.13 (`EMAIL_REGISTER_CONFIRMATION`, verify gate) |
+| 30 | Registration restriction (only first user can register) | §2.13 (`REGISTRATION_OPEN`, `GET /auth/status`) |
+| 31 | Admin panel: first user is admin; manage users; statistics | §2.13 (`is_admin`, `GET/PATCH /admin/users`, `GET /admin/stats`) |
+| 32 | Disable SMTP entirely via env (no mail, no confirmations) | §2.13 (`SMTP_ENABLED` kill switch in `services/mail.py`) |
 
 ## 7. Style
 

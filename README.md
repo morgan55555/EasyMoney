@@ -123,6 +123,11 @@ Copy the values from the table below into `.env` (a `.env.example` will ship wit
 | `DEBUG` | `false` (compose default) | Debug mode (SQL echo); `true` also allows the auto-generated/weak `JWT_SECRET`. |
 | `EXPOSE_API_DOCS` | `false` (app and compose default) | Mounts the generated OpenAPI documentation (Swagger UI, ReDoc, spec JSON). Off by default so deployments don't expose the API surface; set `true` to enable `/api/docs`. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` / `SMTP_USE_TLS` | unset | Real SMTP; mail is log-only whenever `SMTP_HOST` is unset (independent of `DEBUG`) |
+| `SMTP_ENABLED` | `true` | Master switch for all outbound mail. `false` = never send (log only, even with `SMTP_HOST`), and all confirmation flows are skipped (register + email change apply immediately) |
+| `EMAIL_REGISTER_CONFIRMATION` | `false` | Require email confirmation after registration (active only when `SMTP_ENABLED` is `true`) |
+| `EMAIL_CHANGE_CONFIRMATION` | `false` | Require confirmation (sent to the previous address) on email change (active only when `SMTP_ENABLED` is `true`) |
+| `REGISTRATION_OPEN` | `true` | When `false`, only the first user can register (while the users table is empty); after that registration is closed (403) and the register form is hidden |
+| `MAX_AVATAR_MB` | `2` | Max raw size of a user avatar upload (stored as base64 in the DB) |
 | `FRONTEND_URL` | `http://localhost:8081` | Used to build invite links in emails |
 | `DEBT_OVERDUE_DAYS` | `7` | Debt older than this is "overdue" (reminders) |
 | `REMINDER_INTERVAL_DAYS` | `7` | Minimum days between two reminder emails (same member, same group) |

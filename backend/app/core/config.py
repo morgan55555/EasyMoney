@@ -53,6 +53,22 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from: str | None = None
     smtp_use_tls: bool = False
+    # Master switch for outbound mail. When false, ``send_mail`` is a log-only
+    # no-op (even with ``SMTP_HOST`` set) and every confirmation flow is
+    # skipped (register + email change apply immediately).
+    smtp_enabled: bool = True
+    # Require email confirmation after registration. Active only when
+    # ``smtp_enabled`` is also true.
+    email_register_confirmation: bool = False
+    # Require confirmation (sent to the previous address) on email change.
+    # Active only when ``smtp_enabled`` is also true.
+    email_change_confirmation: bool = False
+    # When false, only the first user can register (while the users table is
+    # empty); after that registration is closed (403) and the UI hides the
+    # register form.
+    registration_open: bool = True
+    # Max raw size (MB) of a user avatar upload (image stored as base64).
+    max_avatar_mb: int = 2
     frontend_url: str = "http://localhost:8081"
 
     # --- Debt reminders ---
@@ -74,6 +90,20 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
+    @property
+    def register_confirmation_active(self) -> bool:
+        """Register confirmation is enforced only when the SMTP master switch
+        and the dedicated toggle are both on. When off, ``register`` marks the
+        user verified immediately."""
+        return self.smtp_enabled and self.email_register_confirmation
+
+    @property
+    def email_change_confirmation_active(self) -> bool:
+        """Email-change confirmation is enforced only when the SMTP master
+        switch and the dedicated toggle are both on. When off, the change is
+        applied immediately."""
+        return self.smtp_enabled and self.email_change_confirmation
 
     @model_validator(mode="after")
     def _check_jwt_secret(self) -> Settings:
