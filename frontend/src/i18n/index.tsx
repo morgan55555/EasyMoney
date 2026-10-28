@@ -54,7 +54,7 @@ function makeT(dict: Dict): TFunc {
   return (key, params) => interpolate(dict[key] ?? en[key] ?? key, params)
 }
 
-interface I18nValue {
+export interface I18nValue {
   lang: Lang
   /** BCP-47 tag for Intl formatting: 'en-US' | 'ru-RU'. */
   locale: string
