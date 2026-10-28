@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
+from sqlalchemy import Boolean, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import BaseModel
 
 if TYPE_CHECKING:
+    from app.models.email_token import EmailToken
     from app.models.expense import Expense
     from app.models.group import Group
     from app.models.membership import Membership
@@ -28,7 +29,24 @@ class User(BaseModel):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
 
+    # --- profile / account controls (§2.13) ---
+    # Whether the user may use the admin panel. The first-ever user is admin.
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Whether the address is confirmed. True by default (existing installs);
+    # new users are unverified only when register-confirmation is active.
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Language of this user's emails + default UI language ("en" | "ru").
+    preferred_language: Mapped[str] = mapped_column(String(2), nullable=False, default="en")
+    # Base64 avatar image (no "data:" prefix); null = no avatar.
+    avatar_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Matches avatar_data, e.g. "image/png"; null = no avatar.
+    avatar_content_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
     # --- relationships ---
+    email_tokens: Mapped[list[EmailToken]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     refresh_tokens: Mapped[list[RefreshToken]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",

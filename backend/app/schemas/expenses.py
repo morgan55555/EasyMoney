@@ -79,6 +79,7 @@ class ParticipantOut(BaseModel):
     display_name: str
     share: str
     weight: str | None = None
+    avatar_url: str | None = None
 
 
 class AttachmentOut(BaseModel):
@@ -93,6 +94,7 @@ class ExpenseOut(BaseModel):
     group_id: int
     payer_id: int
     payer: str
+    payer_avatar_url: str | None = None
     created_by: int
     description: str
     comment: str | None

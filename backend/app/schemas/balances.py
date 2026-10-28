@@ -13,6 +13,7 @@ class MemberBalanceOut(BaseModel):
     user_id: int
     display_name: str
     balance: str
+    avatar_url: str | None = None
 
 
 class TransferOut(BaseModel):

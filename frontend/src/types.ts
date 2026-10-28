@@ -29,6 +29,11 @@ export interface UserOut {
   email: string
   display_name: string
   created_at: string
+  is_admin: boolean
+  email_verified: boolean
+  preferred_language: string
+  /** Short avatar URL or null (image served by GET /users/{id}/avatar). */
+  avatar_url: string | null
 }
 
 // --- Groups (§2.9, §2.12) ----------------------------------------------------
@@ -51,6 +56,7 @@ export interface MemberOut {
   email: string
   joined_at: string
   is_owner: boolean
+  avatar_url: string | null
 }
 
 // --- Expenses (§2.1, §2.5, §3.5) ----------------------------------------------
@@ -84,6 +90,7 @@ export interface ParticipantOut {
   display_name: string
   share: string
   weight: string | null
+  avatar_url: string | null
 }
 
 export interface AttachmentOut {
@@ -98,6 +105,7 @@ export interface ExpenseOut {
   group_id: number
   payer_id: number
   payer: string
+  payer_avatar_url: string | null
   created_by: number
   description: string
   comment: string | null
@@ -117,6 +125,7 @@ export interface MemberBalanceOut {
   user_id: number
   display_name: string
   balance: string
+  avatar_url: string | null
 }
 
 export interface TransferOut {
@@ -148,8 +157,10 @@ export interface SettlementOut {
   group_id: number
   from_user_id: number
   from_name: string
+  from_avatar_url: string | null
   to_user_id: number
   to_name: string
+  to_avatar_url: string | null
   amount: string
   state: SettlementState
   confirmed_at: string | null
@@ -193,6 +204,7 @@ export interface ActivityEventOut {
   type: string
   actor_id: number | null
   actor_name: string | null
+  actor_avatar_url: string | null
   ref_type: string | null
   ref_id: number | null
   payload: Record<string, unknown> | null

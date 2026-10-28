@@ -35,6 +35,8 @@ class SettlementOut(BaseModel):
     from_name: str
     to_user_id: int
     to_name: str
+    from_avatar_url: str | None = None
+    to_avatar_url: str | None = None
     amount: str
     # "pending" | "confirmed" | "rejected" | "cancelled" (terminal)
     state: str

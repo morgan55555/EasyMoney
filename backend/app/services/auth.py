@@ -108,11 +108,32 @@ async def logout(db: AsyncSession, token: str) -> None:
         await db.commit()
 
 
-async def update_display_name(db: AsyncSession, user: User, display_name: str) -> User:
-    name = display_name.strip()
-    if not name:
-        raise ValidationFailed("Display name must not be empty")
-    user.display_name = name[:120]
+async def update_profile(
+    db: AsyncSession,
+    user: User,
+    display_name: str | None = None,
+    preferred_language: str | None = None,
+) -> User:
+    """Update the profile fields a user may change themselves (§2.13).
+
+    ``display_name`` and ``preferred_language`` are applied independently;
+    ``None`` leaves the field untouched. Email and password changes go through
+    the dedicated flows (change_email / admin), never here.
+    """
+    changed = False
+    if display_name is not None:
+        name = display_name.strip()
+        if not name:
+            raise ValidationFailed("Display name must not be empty")
+        user.display_name = name[:120]
+        changed = True
+    if preferred_language is not None:
+        if preferred_language not in ("en", "ru"):
+            raise ValidationFailed("preferred_language must be 'en' or 'ru'")
+        user.preferred_language = preferred_language
+        changed = True
+    if not changed:
+        return user
     await db.commit()
     await db.refresh(user)
     return user

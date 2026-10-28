@@ -19,6 +19,7 @@ class ActivityEventOut(BaseModel):
     # The actor's display name, so a client can render a feed line without a
     # user lookup (NULL for system events, which have no actor).
     actor_name: str | None
+    actor_avatar_url: str | None = None
     ref_type: str | None
     ref_id: int | None
     # Event-specific data (mirrors the WS catalogue payloads, §3.2/§3.3).

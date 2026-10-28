@@ -37,3 +37,4 @@ class MemberOut(BaseModel):
     email: str
     joined_at: datetime
     is_owner: bool
+    avatar_url: str | None = None

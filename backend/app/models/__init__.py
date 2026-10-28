@@ -9,6 +9,7 @@ from __future__ import annotations
 from app.models.activity import ActivityEvent
 from app.models.attachment import Attachment
 from app.models.debt_reminder import DebtReminder
+from app.models.email_token import EmailToken
 from app.models.expense import Expense
 from app.models.expense_participant import ExpenseParticipant
 from app.models.group import Group
@@ -23,6 +24,7 @@ __all__ = [
     "ActivityEvent",
     "Attachment",
     "DebtReminder",
+    "EmailToken",
     "Expense",
     "ExpenseParticipant",
     "Group",
