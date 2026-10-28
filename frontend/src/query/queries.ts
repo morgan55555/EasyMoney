@@ -18,6 +18,7 @@ import {
 } from '@tanstack/react-query'
 
 import * as api from '../api/endpoints'
+import { invalidateAvatar } from '../lib/avatarCache'
 import { initSound, playNotification } from '../lib/sound'
 import { socket } from '../ws/socket'
 import type {
@@ -83,6 +84,29 @@ function invalidateGroup(id: number): void {
     void queryClient.invalidateQueries({ queryKey: key })
   }
   void queryClient.invalidateQueries({ queryKey: keys.groups })
+}
+
+/**
+ * The current user's avatar_url is also embedded in per-group payloads
+ * (members, balances, expenses incl. participants, settlements, feed actors)
+ * and the admin user list. After their own avatar is set/cleared these
+ * caches are invalidated too, so every panel on the page renders the new
+ * avatar in place — no tab switch or navigation needed.
+ */
+export function invalidateAvatarCarriers(qc: QueryClient): void {
+  const groups = qc.getQueryData<GroupOut[]>(keys.groups) ?? []
+  for (const g of groups) {
+    for (const key of [
+      keys.members(g.id),
+      keys.balances(g.id),
+      keys.expenses(g.id),
+      keys.settlements(g.id),
+      keys.feed(g.id, null), // prefix: all feed pages
+    ]) {
+      void qc.invalidateQueries({ queryKey: key })
+    }
+  }
+  void qc.invalidateQueries({ queryKey: keys.adminUsers })
 }
 
 let bound = false
@@ -456,7 +480,15 @@ export function useSetAvatar() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (file: File) => api.meApi.setAvatar(file),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.me }),
+    onSuccess: () => {
+      // The avatar URL string is unchanged by the new content, so bust the
+      // cached object URL for it before the fresh `me` flows in; every
+      // mounted <Avatar> of the current user then swaps to the new image
+      // in place (no tab switch, no reload).
+      invalidateAvatar(qc.getQueryData<UserOut>(keys.me)?.avatar_url ?? null)
+      void qc.invalidateQueries({ queryKey: keys.me })
+      invalidateAvatarCarriers(qc)
+    },
   })
 }
 
@@ -464,7 +496,11 @@ export function useClearAvatar() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => api.meApi.clearAvatar(),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.me }),
+    onSuccess: () => {
+      invalidateAvatar(qc.getQueryData<UserOut>(keys.me)?.avatar_url ?? null)
+      void qc.invalidateQueries({ queryKey: keys.me })
+      invalidateAvatarCarriers(qc)
+    },
   })
 }
 

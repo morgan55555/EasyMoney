@@ -125,12 +125,22 @@ export const expensesApi = {
   deleteReceipt: (id: number) => apiFetch<void>(`/api/expenses/${id}/receipt`, { method: 'DELETE' }),
 }
 
+/** Error for a failed authed binary fetch, carrying the HTTP status. */
+export class AuthedBlobError extends Error {
+  status: number
+
+  constructor(status: number) {
+    super(`Could not load resource (${status})`)
+    this.status = status
+  }
+}
+
 /** Fetch a binary resource with the bearer token (plain <a>/<img> can't set it). */
 export async function fetchAuthedBlob(path: string): Promise<Blob> {
   const res = await fetch(path, {
     headers: { Authorization: `Bearer ${getTokens()?.access ?? ''}` },
   })
-  if (!res.ok) throw new Error(`Could not load resource (${res.status})`)
+  if (!res.ok) throw new AuthedBlobError(res.status)
   return res.blob()
 }
 
