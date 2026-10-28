@@ -88,6 +88,8 @@ class MemberBalance:
     user_id: int
     display_name: str
     balance: Decimal
+    # Raw base64 (or None); the API/WS layers map it to a short avatar URL.
+    avatar_data: str | None = None
 
 
 @dataclass(frozen=True)
@@ -296,12 +298,16 @@ async def group_balance_snapshot(db: AsyncSession, group: Group) -> GroupBalance
     balances = await group_balances(db, group)
     name_rows = (
         await db.execute(
-            select(User.id, User.display_name).where(User.id.in_(list(balances) or [0]))
+            select(User.id, User.display_name, User.avatar_data).where(
+                User.id.in_(list(balances) or [0])
+            )
         )
     ).all()
-    names = {uid: name for uid, name in name_rows}
+    names = {uid: name for uid, name, _avatar in name_rows}
+    avatars = {uid: avatar for uid, _name, avatar in name_rows}
     member_balances = tuple(
-        MemberBalance(uid, names[uid], bal) for uid, bal in sorted(balances.items())
+        MemberBalance(uid, names[uid], bal, avatars.get(uid))
+        for uid, bal in sorted(balances.items())
     )
     return GroupBalanceSnapshot(
         currency=group.currency,

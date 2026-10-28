@@ -11,6 +11,7 @@ from app.models.settlement import Settlement
 from app.schemas.expenses import AttachmentOut, ExpenseOut, ParticipantOut
 from app.schemas.groups import GroupOut
 from app.schemas.settlements import SettlementOut
+from app.schemas.user import avatar_url
 from app.services import currency as currency_service
 
 
@@ -45,6 +46,9 @@ def build_expense_out(expense: Expense) -> ExpenseOut:
         group_id=expense.group_id,
         payer_id=expense.payer_id,
         payer=expense.payer.display_name if expense.payer else f"user {expense.payer_id}",
+        payer_avatar_url=(
+            avatar_url(expense.payer_id, expense.payer.avatar_data) if expense.payer else None
+        ),
         created_by=expense.created_by,
         description=expense.description,
         comment=expense.comment,
@@ -59,6 +63,7 @@ def build_expense_out(expense: Expense) -> ExpenseOut:
                 display_name=p.user.display_name if p.user else f"user {p.user_id}",
                 share=currency_service.format_money(p.share, currency),
                 weight=str(p.weight) if p.weight is not None else None,
+                avatar_url=avatar_url(p.user_id, p.user.avatar_data) if p.user else None,
             )
             for p in expense.participants
         ],
@@ -78,11 +83,21 @@ def build_settlement_out(settlement: Settlement) -> SettlementOut:
             if settlement.from_user
             else f"user {settlement.from_user_id}"
         ),
+        from_avatar_url=(
+            avatar_url(settlement.from_user_id, settlement.from_user.avatar_data)
+            if settlement.from_user
+            else None
+        ),
         to_user_id=settlement.to_user_id,
         to_name=(
             settlement.to_user.display_name
             if settlement.to_user
             else f"user {settlement.to_user_id}"
+        ),
+        to_avatar_url=(
+            avatar_url(settlement.to_user_id, settlement.to_user.avatar_data)
+            if settlement.to_user
+            else None
         ),
         amount=currency_service.format_money(settlement.amount, settlement.group.currency),
         state=settlement.state,

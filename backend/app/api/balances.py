@@ -21,6 +21,7 @@ from app.schemas.balances import (
     MemberBalanceOut,
     TransferOut,
 )
+from app.schemas.user import avatar_url
 from app.services import balances as balances_service
 from app.services.currency import format_money
 
@@ -48,6 +49,7 @@ async def get_group_balances(
                 user_id=b.user_id,
                 display_name=b.display_name,
                 balance=format_money(b.balance, snap.currency),
+                avatar_url=avatar_url(b.user_id, b.avatar_data),
             )
             for b in snap.balances
         ],

@@ -18,6 +18,7 @@ from app.models.invitation import Invitation
 from app.models.user import User
 from app.schemas.groups import GroupCreate, GroupOut, GroupRename, MemberOut
 from app.schemas.invites import InviteCreate, InviteOut
+from app.schemas.user import avatar_url
 from app.services import balances as balances_service
 from app.services import groups as groups_service
 from app.services import invites as invites_service
@@ -83,6 +84,7 @@ async def list_members(
             email=u.email,
             joined_at=m.joined_at,
             is_owner=u.id == group.created_by,
+            avatar_url=avatar_url(u.id, u.avatar_data),
         )
         for u, m in rows
     ]

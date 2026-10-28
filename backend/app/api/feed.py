@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_group_member
 from app.models.group import Group
 from app.schemas.feed import ActivityEventOut, ActivityPageOut
+from app.schemas.user import avatar_url
 from app.services import feed as feed_service
 
 router = APIRouter(prefix="/api", tags=["feed"])
@@ -32,6 +33,7 @@ async def list_activity(
                 type=e.type,
                 actor_id=e.actor_id,
                 actor_name=e.actor.display_name if e.actor else None,
+                actor_avatar_url=avatar_url(e.actor.id, e.actor.avatar_data) if e.actor else None,
                 ref_type=e.ref_type,
                 ref_id=e.ref_id,
                 payload=e.payload,

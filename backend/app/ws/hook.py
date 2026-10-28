@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.group import Group
 from app.models.notification import Notification
+from app.schemas.user import avatar_url
 from app.services import balances as balances_service
 from app.services import currency as currency_service
 from app.ws.registry import ConnectionManager
@@ -64,6 +65,7 @@ def snapshot_to_dict(snapshot: balances_service.GroupBalanceSnapshot) -> dict[st
                 "user_id": b.user_id,
                 "display_name": b.display_name,
                 "balance": currency_service.format_money(b.balance, cur),
+                "avatar_url": avatar_url(b.user_id, b.avatar_data),
             }
             for b in snapshot.balances
         ],
