@@ -1,8 +1,8 @@
-"""Mail transport (AGENTS.md §3.4).
+"""Mail transport (AGENTS.md §3.4, §2.13).
 
-``aiosmtplib`` when ``SMTP_HOST`` is set; otherwise log-only (dev). Every
-mail path in the app goes through this module — nothing else opens SMTP
-connections.
+``aiosmtplib`` when ``SMTP_HOST`` is set and ``SMTP_ENABLED`` is true;
+otherwise log-only (dev or kill switch). Every mail path in the app goes
+through this module — nothing else opens SMTP connections.
 
 User-controlled values (group names, display names) are escaped with
 ``html.escape`` in the **HTML** bodies of all templates; the subjects and
@@ -12,6 +12,9 @@ header with the app icon (inlined as a base64 data URI) and the EasyMoney
 wordmark, a 600px-wide white card on a gray page, and an indigo CTA button
 for the action link. Group-scoped mails (reminder, close summary) link to
 the group page ``FRONTEND_URL/groups/{id}``, not the home page.
+
+All message builders accept a ``lang`` parameter (``"en"`` | ``"ru"``);
+recipients without an account default to ``"en"``.
 """
 
 from __future__ import annotations
@@ -66,6 +69,121 @@ _OK_TEXT = "#065f46"
 _FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 
+# ---------------------------------------------------------------------------
+# Localization (§2.13): EN + RU string sets
+# ---------------------------------------------------------------------------
+
+_STRINGS: dict[str, dict[str, str]] = {
+    "en": {
+        "footer": "EasyMoney &mdash; shared expenses, settled fairly.",
+        "greeting": "Hi {name},",
+        "greeting_no_name": "Hi,",
+        "signoff": "— EasyMoney",
+        "signoff_plain": "- EasyMoney",
+        # invite
+        "invite_subject": '{inviter} invited you to "{group}" on EasyMoney',
+        "invite_body": '{inviter} invited you to join the group "{group}" on EasyMoney.',
+        "invite_cta": "Accept the invitation",
+        "invite_expiry": "This invitation expires in {days} days.",
+        # overdue
+        "overdue_subject": 'EasyMoney: you owe {total} in "{group}"',
+        "overdue_body": 'Your debt in the group "{group}" is overdue.',
+        "overdue_section": "You currently owe",
+        "overdue_total_label": "Total",
+        "overdue_cta": "Open the group in EasyMoney",
+        "overdue_plaintext_label": "You currently owe:",
+        "overdue_total_plain": "Total: {total}",
+        "overdue_link_label": "Open the group in EasyMoney:",
+        # close summary
+        "close_subject": 'EasyMoney: final summary for "{group}"',
+        "close_intro": 'The group "{group}" has been closed. Final summary:',
+        "close_settled": "Everyone is settled up — no outstanding debts.",
+        "close_section_balances": "Balances",
+        "close_section_pairs": "Who owes whom",
+        "close_section_transfers": "Suggested transfers",
+        "close_owes": "{frm} owes {to}",
+        "close_cta": "Open the group in EasyMoney",
+        "close_plain_balances": "Balances:",
+        "close_plain_pairs": "Who owes whom:",
+        "close_plain_transfers": "Suggested transfers (the minimal set that settles everything):",
+        # register confirmation
+        "register_subject": "Confirm your email on EasyMoney",
+        "register_body": (
+            "Please confirm your email address to activate your EasyMoney account:"
+        ),
+        "register_cta": "Confirm email",
+        # email-change confirmation
+        "change_subject": "Confirm your email change on EasyMoney",
+        "change_body": (
+            'We received a request to change the email for your EasyMoney account to '
+            "{new_email}. Click below to confirm. If you did not request this change, "
+            "you can ignore this email."
+        ),
+        "change_cta": "Confirm change",
+    },
+    "ru": {
+        "footer": "EasyMoney — общие расходы, честный расчёт.",
+        "greeting": "Привет, {name},",
+        "greeting_no_name": "Привет,",
+        "signoff": "— EasyMoney",
+        "signoff_plain": "- EasyMoney",
+        # invite
+        "invite_subject": 'Вас пригласили в группу "{group}" в EasyMoney',
+        "invite_body": '{inviter} пригласил(а) вас в группу "{group}" в EasyMoney.',
+        "invite_cta": "Принять приглашение",
+        "invite_expiry": "Приглашение действует {days} дн.",
+        # overdue
+        "overdue_subject": 'EasyMoney: вы должны {total} в "{group}"',
+        "overdue_body": 'Ваш долг в группе "{group}" просрочен.',
+        "overdue_section": "Вы должны",
+        "overdue_total_label": "Итого",
+        "overdue_cta": "Открыть группу в EasyMoney",
+        "overdue_plaintext_label": "Вы должны:",
+        "overdue_total_plain": "Итого: {total}",
+        "overdue_link_label": "Открыть группу в EasyMoney:",
+        # close summary
+        "close_subject": 'EasyMoney: итоговый отчёт по "{group}"',
+        "close_intro": 'Группа "{group}" закрыта. Итоговый отчёт:',
+        "close_settled": "Все долги погашены — незакрытых долгов нет.",
+        "close_section_balances": "Балансы",
+        "close_section_pairs": "Кто кому должен",
+        "close_section_transfers": "Рекомендуемые переводы",
+        "close_owes": "{frm} должен(на) {to}",
+        "close_cta": "Открыть группу в EasyMoney",
+        "close_plain_balances": "Балансы:",
+        "close_plain_pairs": "Кто кому должен:",
+        "close_plain_transfers": "Рекомендуемые переводы (минимальный набор для полного расчёта):",
+        # register confirmation
+        "register_subject": "Подтвердите email в EasyMoney",
+        "register_body": "Подтвердите адрес email, чтобы активировать аккаунт EasyMoney:",
+        "register_cta": "Подтвердить email",
+        # email-change confirmation
+        "change_subject": "Подтвердите смену email в EasyMoney",
+        "change_body": (
+            "Поступил запрос на смену email аккаунта EasyMoney на {new_email}. "
+            "Нажмите ниже, чтобы подтвердить. Если вы не запрашивали смену, "
+            "проигнорируйте это письмо."
+        ),
+        "change_cta": "Подтвердить смену",
+    },
+}
+
+
+def _t(lang: str, key: str) -> str:
+    """Look up a localized string; unknown languages fall back to English."""
+    strings = _STRINGS.get(lang, _STRINGS["en"])
+    return strings[key]
+
+
+def _greeting(lang: str, name: str | None) -> str:
+    """The personal greeting line (the plain-text twin is built by callers)."""
+    line = _t(lang, "greeting").format(name=escape(name)) if name else _t(lang, "greeting_no_name")
+    return (
+        f'<p style="margin:0 0 12px;font-family:{_FONT};font-size:18px;font-weight:600;'
+        f'color:{_STRONG};">{line}</p>'
+    )
+
+
 def _brand_header() -> str:
     """The app header, like the frontend top bar: icon + EasyMoney wordmark."""
     icon = _icon_data_uri()
@@ -82,8 +200,9 @@ def _brand_header() -> str:
     )
 
 
-def _email_html(body: str) -> str:
+def _email_html(lang: str, body: str) -> str:
     """The branded envelope: gray page, 600px white card, header, body, footer."""
+    footer = _t(lang, "footer")
     return (
         f'<div style="background-color:{_PAGE_BG};padding:24px 12px;">'
         f'<div style="max-width:600px;margin:0 auto;background-color:#ffffff;'
@@ -94,17 +213,8 @@ def _email_html(body: str) -> str:
         f'<div style="padding:14px 32px;background-color:{_PAGE_BG};'
         f"border-top:1px solid {_SOFT_BORDER};border-radius:0 0 12px 12px;"
         f'font-family:{_FONT};color:{_FAINT};font-size:12px;">'
-        f"EasyMoney &mdash; shared expenses, settled fairly.</div>"
+        f"{footer}"
         f"</div></div>"
-    )
-
-
-def _greeting(name: str | None) -> str:
-    """The personal greeting line (the plain-text twin is built by callers)."""
-    line = f"Hi {escape(name)}," if name else "Hi,"
-    return (
-        f'<p style="margin:0 0 12px;font-family:{_FONT};font-size:18px;font-weight:600;'
-        f'color:{_STRONG};">{line}</p>'
     )
 
 
@@ -133,13 +243,14 @@ def _money_row(label: str, amount: str, last: bool = False) -> str:
     )
 
 
-def _total_row(amount: str) -> str:
+def _total_row(lang: str, amount: str) -> str:
     """The bold accent-colored total line under the owed list."""
+    label = _t(lang, "overdue_total_label")
     return (
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         f'style="width:100%;border-collapse:collapse;"><tr>'
         f'<td style="padding:12px 0;border-top:1px solid {_CARD_BORDER};'
-        f'font-family:{_FONT};font-size:15px;font-weight:700;color:{_STRONG};">Total</td>'
+        f'font-family:{_FONT};font-size:15px;font-weight:700;color:{_STRONG};">{label}</td>'
         f'<td style="padding:12px 0;border-top:1px solid {_CARD_BORDER};'
         f"font-family:{_FONT};font-size:16px;font-weight:700;text-align:right;"
         f'white-space:nowrap;color:{_ACCENT};">{amount}</td>'
@@ -166,9 +277,26 @@ def _group_url(group_id: int | None) -> str:
     return f"{base}/groups/{group_id}"
 
 
+def _confirm_url(token: str) -> str:
+    """The email-confirmation page URL (frontend route)."""
+    return f"{get_settings().frontend_url.rstrip('/')}/auth/email/confirm?token={token}"
+
+
+# ---------------------------------------------------------------------------
+# Transport
+# ---------------------------------------------------------------------------
+
+
 async def send_mail(to: str, subject: str, text: str, html: str | None = None) -> None:
-    """Send one message; log it instead when no SMTP host is configured."""
+    """Send one message; log it instead when mail is disabled or no host is set.
+
+    ``SMTP_ENABLED=false`` makes this a log-only no-op **even when**
+    ``SMTP_HOST`` is configured (the kill switch, §2.13).
+    """
     settings = get_settings()
+    if not settings.smtp_enabled:
+        logger.info("[mail] (disabled) to=%s subject=%r", to, subject)
+        return
     msg = EmailMessage()
     msg["From"] = settings.smtp_from or DEFAULT_FROM
     msg["To"] = to
@@ -195,34 +323,50 @@ async def send_mail(to: str, subject: str, text: str, html: str | None = None) -
         logger.info("[mail] body:\n%s", text)
 
 
+# ---------------------------------------------------------------------------
+# Money helper
+# ---------------------------------------------------------------------------
+
+
 def _money(amount: Decimal, currency: str) -> str:
     """Render money with its currency code: ``12.50 USD``, ``1250 JPY``."""
     return f"{currency_service.format_money(amount, currency)} {currency}"
 
 
+# ---------------------------------------------------------------------------
+# Message builders (each returns (subject, plain_text, html))
+# ---------------------------------------------------------------------------
+
+
 def invite_message(
-    group_name: str, inviter_name: str, token: str, days: int
+    group_name: str,
+    inviter_name: str,
+    token: str,
+    days: int,
+    lang: str = "en",
 ) -> tuple[str, str, str]:
     """Subject/text/html for an email invitation (§2.10)."""
     link = f"{get_settings().frontend_url.rstrip('/')}/invite/{token}"
-    subject = f'{inviter_name} invited you to "{group_name}" on EasyMoney'
+    subject = _t(lang, "invite_subject").format(inviter=inviter_name, group=group_name)
     text = (
-        "Hi,\n\n"
-        f'{inviter_name} invited you to join the group "{group_name}" on EasyMoney.\n\n'
-        "Accept the invitation:\n"
-        f"{link}\n\n"
-        f"This invitation expires in {days} days.\n\n"
-        "— EasyMoney"
+        f"{_t(lang, 'greeting_no_name')}\n\n"
+        + _t(lang, "invite_body").format(inviter=inviter_name, group=group_name)
+        + f"\n\nAccept the invitation:\n{link}\n\n"
+        + _t(lang, "invite_expiry").format(days=days)
+        + f"\n\n{_t(lang, 'signoff')}"
+    )
+    body_text_html = _t(lang, "invite_body").format(
+        inviter=escape(inviter_name), group=escape(group_name)
     )
     body = (
-        _greeting(None)
-        + f'<p style="margin:0 0 8px;">{escape(inviter_name)} invited you to join the group '
-        + f"<strong>{escape(group_name)}</strong> on EasyMoney.</p>"
-        + _cta(link, "Accept the invitation")
+        _greeting(lang, None)
+        + f'<p style="margin:0 0 8px;">{body_text_html}</p>'
+        + _cta(link, _t(lang, "invite_cta"))
         + f'<p style="margin:16px 0 0;font-size:13px;color:{_MUTED};">'
-        + f"This invitation expires in {days} days.</p>"
+        + _t(lang, "invite_expiry").format(days=days)
+        + "</p>"
     )
-    return subject, text, _email_html(body)
+    return subject, text, _email_html(lang, body)
 
 
 def overdue_reminder_message(
@@ -232,6 +376,7 @@ def overdue_reminder_message(
     per_creditor: list[tuple[str, Decimal]],
     total: Decimal,
     group_id: int | None = None,
+    lang: str = "en",
 ) -> tuple[str, str, str]:
     """Subject/text/html for an overdue-debt reminder (§2.7 step 4).
 
@@ -241,31 +386,30 @@ def overdue_reminder_message(
     """
     group_url = _group_url(group_id)
     total_str = _money(total, currency)
-    subject = f'EasyMoney: you owe {total_str} in "{group_name}"'
+    subject = _t(lang, "overdue_subject").format(total=total_str, group=group_name)
     items = "\n".join(f"  - {name}: {_money(amount, currency)}" for name, amount in per_creditor)
     text = (
-        f"Hi {debtor_name},\n\n"
-        f'Your debt in the group "{group_name}" is overdue.\n\n'
-        "You currently owe:\n"
-        f"{items}\n\n"
-        f"Total: {total_str}\n\n"
-        f"Open the group in EasyMoney:\n{group_url}\n\n"
-        "- EasyMoney"
+        f"{_t(lang, 'greeting').format(name=debtor_name)}\n\n"
+        + _t(lang, "overdue_body").format(group=group_name)
+        + f"\n\n{_t(lang, 'overdue_plaintext_label')}\n{items}\n\n"
+        + _t(lang, "overdue_total_plain").format(total=total_str)
+        + f"\n\n{_t(lang, 'overdue_link_label')}\n{group_url}\n\n"
+        + f"{_t(lang, 'signoff_plain')}"
     )
     rows = "".join(
         _money_row(escape(name), _money(amount, currency), last=(i == len(per_creditor) - 1))
         for i, (name, amount) in enumerate(per_creditor)
     )
+    overdue_body_text = escape(_t(lang, "overdue_body").format(group=group_name))
     body = (
-        _greeting(debtor_name)
-        + '<p style="margin:0 0 8px;">Your debt in the group '
-        + f"<strong>{escape(group_name)}</strong> is overdue.</p>"
-        + _section("You currently owe")
+        _greeting(lang, debtor_name)
+        + f'<p style="margin:0 0 8px;">{overdue_body_text}</p>'
+        + _section(_t(lang, "overdue_section"))
         + rows
-        + _total_row(total_str)
-        + _cta(group_url, "Open the group in EasyMoney")
+        + _total_row(lang, total_str)
+        + _cta(group_url, _t(lang, "overdue_cta"))
     )
-    return subject, text, _email_html(body)
+    return subject, text, _email_html(lang, body)
 
 
 def close_summary_message(
@@ -276,6 +420,7 @@ def close_summary_message(
     transfers: list[tuple[str, str, Decimal]],
     recipient_name: str | None = None,
     group_id: int | None = None,
+    lang: str = "en",
 ) -> tuple[str, str, str]:
     """Subject/text/html for the group-close final summary (§2.9).
 
@@ -287,37 +432,44 @@ def close_summary_message(
     links the CTA to the group page; without it, the app home page.
     """
     group_url = _group_url(group_id)
-    greeting = f"Hi {recipient_name}," if recipient_name else "Hi,"
-    link_text = f"Open the group in EasyMoney:\n{group_url}\n\n"
-    subject = f'EasyMoney: final summary for "{group_name}"'
+    greeting = (
+        _t(lang, "greeting").format(name=recipient_name)
+        if recipient_name
+        else _t(lang, "greeting_no_name")
+    )
+    link_text = f"{_t(lang, 'overdue_link_label')}\n{group_url}\n\n"
+    subject = _t(lang, "close_subject").format(group=group_name)
     intro = (
-        '<p style="margin:0 0 8px;">The group '
-        + f"<strong>{escape(group_name)}</strong> has been closed. Final summary:</p>"
+        '<p style="margin:0 0 8px;">'
+        + escape(_t(lang, "close_intro").format(group=group_name))
+        + "</p>"
     )
     if not transfers:
         text = (
             f"{greeting}\n\n"
-            f'The group "{group_name}" has been closed. Final summary:\n\n'
-            "Everyone is settled up - no outstanding debts.\n\n"
+            + _t(lang, "close_intro").format(group=group_name)
+            + f"\n\n{_t(lang, 'close_settled')}\n\n"
             f"{link_text}"
-            "- EasyMoney"
+            f"{_t(lang, 'signoff_plain')}"
         )
         body = (
-            _greeting(recipient_name)
+            _greeting(lang, recipient_name)
             + intro
             + f'<div style="margin-top:8px;padding:12px 16px;background-color:{_OK_BG};'
             + f'border:1px solid {_OK_BORDER};border-radius:8px;color:{_OK_TEXT};font-size:14px;">'
-            + "Everyone is settled up - no outstanding debts.</div>"
-            + _cta(group_url, "Open the group in EasyMoney")
+            + f"{escape(_t(lang, 'close_settled'))}</div>"
+            + _cta(group_url, _t(lang, "close_cta"))
         )
-        return subject, text, _email_html(body)
+        return subject, text, _email_html(lang, body)
     balance_rows = "".join(
         _money_row(escape(name), _money(amount, currency), last=(i == len(balances) - 1))
         for i, (name, amount) in enumerate(balances)
     )
     pair_rows = "".join(
         _money_row(
-            f"{escape(frm)} owes {escape(to)}", _money(amount, currency), last=(i == len(pairs) - 1)
+            escape(_t(lang, "close_owes").format(frm=escape(frm), to=escape(to))),
+            _money(amount, currency),
+            last=(i == len(pairs) - 1),
         )
         for i, (frm, to, amount) in enumerate(pairs)
     )
@@ -333,32 +485,85 @@ def close_summary_message(
         f"  - {name}: {_money(amount, currency)}" for name, amount in balances
     )
     pair_items = "\n".join(
-        f"  - {frm} owes {to} {_money(amount, currency)}" for frm, to, amount in pairs
+        f"  - {_t(lang, 'close_owes').format(frm=frm, to=to)} {_money(amount, currency)}"
+        for frm, to, amount in pairs
     )
     transfer_items = "\n".join(
         f"  - {frm} -> {to}: {_money(amount, currency)}" for frm, to, amount in transfers
     )
     text = (
         f"{greeting}\n\n"
-        f'The group "{group_name}" has been closed. Final summary:\n\n'
-        "Balances:\n"
-        f"{balance_items}\n\n"
-        "Who owes whom:\n"
-        f"{pair_items}\n\n"
-        "Suggested transfers (the minimal set that settles everything):\n"
-        f"{transfer_items}\n\n"
+        + _t(lang, "close_intro").format(group=group_name)
+        + f"\n\n{_t(lang, 'close_plain_balances')}\n{balance_items}\n\n"
+        + f"{_t(lang, 'close_plain_pairs')}\n{pair_items}\n\n"
+        + f"{_t(lang, 'close_plain_transfers')}\n{transfer_items}\n\n"
         f"{link_text}"
-        "- EasyMoney"
+        f"{_t(lang, 'signoff_plain')}"
     )
     body = (
-        _greeting(recipient_name)
+        _greeting(lang, recipient_name)
         + intro
-        + _section("Balances")
+        + _section(_t(lang, "close_section_balances"))
         + balance_rows
-        + _section("Who owes whom")
+        + _section(_t(lang, "close_section_pairs"))
         + pair_rows
-        + _section("Suggested transfers")
+        + _section(_t(lang, "close_section_transfers"))
         + transfer_rows
-        + _cta(group_url, "Open the group in EasyMoney")
+        + _cta(group_url, _t(lang, "close_cta"))
     )
-    return subject, text, _email_html(body)
+    return subject, text, _email_html(lang, body)
+
+
+# ---------------------------------------------------------------------------
+# New confirmation emails (§2.13)
+# ---------------------------------------------------------------------------
+
+
+def register_confirmation_message(
+    user_name: str,
+    token: str,
+    lang: str = "en",
+) -> tuple[str, str, str]:
+    """Subject/text/html for the registration confirmation email (§2.13)."""
+    link = _confirm_url(token)
+    subject = _t(lang, "register_subject")
+    text = (
+        f"{_t(lang, 'greeting').format(name=user_name)}\n\n"
+        + _t(lang, "register_body")
+        + f"\n{link}\n\n"
+        + f"{_t(lang, 'signoff_plain')}"
+    )
+    body = (
+        _greeting(lang, user_name)
+        + f'<p style="margin:0 0 8px;">{escape(_t(lang, "register_body"))}</p>'
+        + _cta(link, _t(lang, "register_cta"))
+    )
+    return subject, text, _email_html(lang, body)
+
+
+def change_confirmation_message(
+    user_name: str,
+    new_email: str,
+    token: str,
+    lang: str = "en",
+) -> tuple[str, str, str]:
+    """Subject/text/html for the email-change confirmation (§2.13).
+
+    Sent to the **previous** address. The token links the user to the
+    confirm endpoint which applies the swap.
+    """
+    link = _confirm_url(token)
+    subject = _t(lang, "change_subject")
+    body_text = _t(lang, "change_body").format(new_email=new_email)
+    text = (
+        f"{_t(lang, 'greeting').format(name=user_name)}\n\n"
+        + f"{body_text}\n"
+        + f"{link}\n\n"
+        + f"{_t(lang, 'signoff_plain')}"
+    )
+    body = (
+        _greeting(lang, user_name)
+        + f'<p style="margin:0 0 8px;">{escape(body_text)}</p>'
+        + _cta(link, _t(lang, "change_cta"))
+    )
+    return subject, text, _email_html(lang, body)

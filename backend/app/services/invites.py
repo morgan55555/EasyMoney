@@ -51,7 +51,7 @@ async def create_invite(
     await db.refresh(invite)
     if kind == "email" and invite.email_to:
         subject, text, html = mail_service.invite_message(
-            group.name, actor.display_name, invite.token, settings.invite_expiry_days
+            group.name, actor.display_name, invite.token, settings.invite_expiry_days, lang="en"
         )
         try:
             await mail_service.send_mail(invite.email_to, subject, text, html)

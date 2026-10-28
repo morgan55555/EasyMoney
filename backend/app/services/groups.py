@@ -237,6 +237,7 @@ async def close_group(db: AsyncSession, group: Group, user: User) -> Group:
                     transfers,
                     recipient_name=member.display_name,
                     group_id=group.id,
+                    lang=member.preferred_language,
                 )
                 await mail_service.send_mail(member.email, subject, text, html)
             except Exception:

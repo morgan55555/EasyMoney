@@ -191,7 +191,13 @@ def build_reminder_email(
     ]
     total = sum((amount for _, amount in per_creditor), Decimal(0))
     subject, text, html = mail_service.overdue_reminder_message(
-        group.name, group.currency, debtor.display_name, per_creditor, total, group_id=group.id
+        group.name,
+        group.currency,
+        debtor.display_name,
+        per_creditor,
+        total,
+        group_id=group.id,
+        lang=debtor.preferred_language,
     )
     return debtor.email, subject, text, html
 
