@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# --- Planning / working docs (local only) ---
+PLAN.md
+
 # --- Python ---
 __pycache__/
 *.py[cod]
