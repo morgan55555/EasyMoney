@@ -9,7 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.schemas.auth import EmailChangeRequest, EmailChangeResponse
+from app.schemas.auth import (
+    EmailChangeRequest,
+    EmailChangeResponse,
+    PasswordChangeRequest,
+    PasswordChangeResponse,
+)
 from app.schemas.user import AvatarSetResponse, MePatchRequest, UserOut, avatar_url
 from app.services import auth as auth_service
 from app.services import avatar as avatar_service
@@ -55,6 +60,16 @@ async def change_email(
 ) -> EmailChangeResponse:
     status = await auth_service.change_email(db, user, body.new_email)
     return EmailChangeResponse(status=status)
+
+
+@router.post("/me/password/change", response_model=PasswordChangeResponse)
+async def change_password(
+    body: PasswordChangeRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PasswordChangeResponse:
+    status = await auth_service.change_password(db, user, body.new_password)
+    return PasswordChangeResponse(status=status)
 
 
 @router.post("/me/avatar", response_model=AvatarSetResponse)

@@ -14,6 +14,8 @@ class RegisterRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=8, max_length=200)
     display_name: str | None = Field(default=None, max_length=120)
+    # UI-language choice picked on the login page (§2.13); defaults to "en".
+    preferred_language: str | None = Field(default=None, max_length=2)
 
 
 class LoginRequest(BaseModel):
@@ -58,6 +60,16 @@ class EmailChangeRequest(BaseModel):
 
 
 class EmailChangeResponse(BaseModel):
+    """``"changed"`` (applied immediately) or ``"confirmation_sent"``."""
+
+    status: str
+
+
+class PasswordChangeRequest(BaseModel):
+    new_password: str = Field(min_length=8, max_length=200)
+
+
+class PasswordChangeResponse(BaseModel):
     """``"changed"`` (applied immediately) or ``"confirmation_sent"``."""
 
     status: str

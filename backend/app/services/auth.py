@@ -27,6 +27,7 @@ from app.core.security import (
 )
 from app.models.email_token import (
     PURPOSE_CHANGE,
+    PURPOSE_PASSWORD,
     PURPOSE_REGISTER,
     STATUS_PENDING,
     STATUS_REVOKED,
@@ -49,13 +50,21 @@ def _valid_email(email: str) -> bool:
     return bool(local) and bool(domain) and "." in domain
 
 
-async def register(db: AsyncSession, email: str, password: str, display_name: str | None) -> User:
+async def register(
+    db: AsyncSession,
+    email: str,
+    password: str,
+    display_name: str | None,
+    preferred_language: str | None = None,
+) -> User:
     settings = get_settings()
     email_norm = _norm_email(email)
     if not _valid_email(email_norm):
         raise ValidationFailed("A valid email address is required")
     if len(password) < 8:
         raise ValidationFailed("Password must be at least 8 characters")
+    if preferred_language is not None and preferred_language not in ("en", "ru"):
+        raise ValidationFailed("preferred_language must be 'en' or 'ru'")
 
     # Registration restriction (§2.13): when closed, only the first user may
     # register (while the users table is empty).
@@ -83,6 +92,7 @@ async def register(db: AsyncSession, email: str, password: str, display_name: st
         display_name=name[:120],
         is_admin=is_first,
         email_verified=verified,
+        preferred_language=preferred_language or "en",
     )
     db.add(user)
     await db.commit()
@@ -123,6 +133,7 @@ async def _issue_confirmation_token(
     user: User,
     purpose: str,
     target_email: str,
+    password_hash: str | None = None,
 ) -> EmailToken:
     """Create a pending token, revoke any previous pending one for the same
     purpose, and mail the confirmation link.
@@ -130,7 +141,9 @@ async def _issue_confirmation_token(
     The link is always mailed to the user's **current** email address: for
     ``register`` that is the address being verified, and for ``change`` it is
     the *previous* address (AGENTS.md §2.13, req 26) — the new address only
-    becomes the account's email once the token is confirmed.
+    becomes the account's email once the token is confirmed. ``password``
+    tokens additionally carry ``password_hash`` (the pending new-password
+    hash), applied to the user only on confirmation.
     """
     # Revoke any existing pending token for this user + purpose.
     previous = await db.scalar(
@@ -150,16 +163,21 @@ async def _issue_confirmation_token(
         target_email=target_email,
         status=STATUS_PENDING,
         expires_at=datetime.now(UTC) + timedelta(hours=24),
+        password_hash=password_hash,
     )
     db.add(token)
     await db.commit()
     await db.refresh(token)
 
     # Mail the confirmation (best-effort: a mail failure must not block the
-    # registration or email-change flow).
+    # registration or any change flow).
     try:
         if purpose == PURPOSE_REGISTER:
             subject, text, html = mail_service.register_confirmation_message(
+                user.display_name, token.token, lang=user.preferred_language
+            )
+        elif purpose == PURPOSE_PASSWORD:
+            subject, text, html = mail_service.password_confirmation_message(
                 user.display_name, token.token, lang=user.preferred_language
             )
         else:
@@ -179,6 +197,7 @@ async def confirm_email_token(db: AsyncSession, token_str: str) -> User:
 
     - ``register``: marks the user's ``email_verified = True``.
     - ``change``: swaps the user's email to the token's ``target_email``.
+    - ``password``: applies the token's ``password_hash`` to the user.
     """
     row = await db.scalar(select(EmailToken).where(EmailToken.token == token_str))
     if row is None:
@@ -200,6 +219,10 @@ async def confirm_email_token(db: AsyncSession, token_str: str) -> User:
         if existing is not None:
             raise Conflict("The target email is already in use")
         user.email = row.target_email
+    elif row.purpose == PURPOSE_PASSWORD:
+        if not row.password_hash:
+            raise Conflict("Token carries no password change")
+        user.password_hash = row.password_hash
 
     row.status = STATUS_USED
     await db.commit()
@@ -262,6 +285,33 @@ async def change_email(db: AsyncSession, user: User, new_email: str) -> str:
         return "confirmation_sent"
 
     user.email = new_norm
+    await db.commit()
+    await db.refresh(user)
+    return "changed"
+
+
+async def change_password(db: AsyncSession, user: User, new_password: str) -> str:
+    """Initiate a password change. Returns ``"changed"`` or ``"confirmation_sent"``.
+
+    - When confirmation is active: creates a ``password`` token carrying the
+      new-password hash, mails the user's **current** address, and returns
+      ``"confirmation_sent"`` (the password is NOT yet changed).
+    - When not active: applies the new hash immediately and returns
+      ``"changed"``.
+    """
+    settings = get_settings()
+    if len(new_password) < 8:
+        raise ValidationFailed("Password must be at least 8 characters")
+    if verify_password(new_password, user.password_hash):
+        raise Conflict("You are already using this password")
+
+    if settings.password_change_confirmation_active:
+        await _issue_confirmation_token(
+            db, user, PURPOSE_PASSWORD, user.email, password_hash=hash_password(new_password)
+        )
+        return "confirmation_sent"
+
+    user.password_hash = hash_password(new_password)
     await db.commit()
     await db.refresh(user)
     return "changed"

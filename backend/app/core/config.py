@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     # Require confirmation (sent to the previous address) on email change.
     # Active only when ``smtp_enabled`` is also true.
     email_change_confirmation: bool = False
+    # Require confirmation (sent to the current address) on password change.
+    # Active only when ``smtp_enabled`` is also true.
+    password_change_confirmation: bool = False
     # When false, only the first user can register (while the users table is
     # empty); after that registration is closed (403) and the UI hides the
     # register form.
@@ -104,6 +107,13 @@ class Settings(BaseSettings):
         switch and the dedicated toggle are both on. When off, the change is
         applied immediately."""
         return self.smtp_enabled and self.email_change_confirmation
+
+    @property
+    def password_change_confirmation_active(self) -> bool:
+        """Password-change confirmation is enforced only when the SMTP master
+        switch and the dedicated toggle are both on. When off, the change is
+        applied immediately."""
+        return self.smtp_enabled and self.password_change_confirmation
 
     @model_validator(mode="after")
     def _check_jwt_secret(self) -> Settings:

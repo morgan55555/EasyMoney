@@ -1,9 +1,12 @@
-"""Email confirmation tokens: registration + email-change (AGENTS.md §2.13).
+"""Email confirmation tokens: registration, email-change and password-change
+(AGENTS.md §2.13).
 
-A single table serves both confirmation flows, distinguished by ``purpose``.
-Tokens are 128-bit URL-safe secrets. A token is valid while ``status`` is
-``"pending"`` and unexpired; confirming marks it ``used``. Reissuing (resend /
-a new change request) revokes the previous ``pending`` token.
+A single table serves all three confirmation flows, distinguished by
+``purpose``. Tokens are 128-bit URL-safe secrets. A token is valid while
+``status`` is ``"pending"`` and unexpired; confirming marks it ``used``.
+Reissuing (resend / a new change request) revokes the previous ``pending``
+token. Password-change tokens additionally carry the pending new-password
+hash in ``password_hash`` (applied to the user only on confirmation).
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ if TYPE_CHECKING:
 # --- purpose values ---
 PURPOSE_REGISTER = "register"
 PURPOSE_CHANGE = "change"
+PURPOSE_PASSWORD = "password"
 
 # --- status values ---
 STATUS_PENDING = "pending"
@@ -38,7 +42,7 @@ class EmailToken(BaseModel):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
-    # "register" | "change" (see the PURPOSE_* constants above).
+    # "register" | "change" | "password" (see the PURPOSE_* constants above).
     purpose: Mapped[str] = mapped_column(String(8), nullable=False)
     # URL-safe 128-bit token, unique.
     token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
@@ -47,5 +51,9 @@ class EmailToken(BaseModel):
     # "pending" | "used" | "revoked".
     status: Mapped[str] = mapped_column(String(8), nullable=False, default=STATUS_PENDING)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Only for "password" tokens: the argon2 hash of the pending new password
+    # (same type as ``users.password_hash``). Applied to the user only when
+    # the token is confirmed; NULL otherwise.
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="email_tokens")

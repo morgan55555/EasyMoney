@@ -120,6 +120,14 @@ _STRINGS: dict[str, dict[str, str]] = {
             "you can ignore this email."
         ),
         "change_cta": "Confirm change",
+        # password-change confirmation
+        "password_subject": "Confirm your password change on EasyMoney",
+        "password_body": (
+            "We received a request to change the password for your EasyMoney account. "
+            "Click below to confirm. If you did not request this change, you can ignore "
+            "this email."
+        ),
+        "password_cta": "Confirm password change",
     },
     "ru": {
         "footer": "EasyMoney — общие расходы, честный расчёт.",
@@ -165,6 +173,14 @@ _STRINGS: dict[str, dict[str, str]] = {
             "проигнорируйте это письмо."
         ),
         "change_cta": "Подтвердить смену",
+        # password-change confirmation
+        "password_subject": "Подтвердите смену пароля в EasyMoney",
+        "password_body": (
+            "Поступил запрос на смену пароля аккаунта EasyMoney. Нажмите ниже, "
+            "чтобы подтвердить. Если вы не запрашивали смену пароля, проигнорируйте "
+            "это письмо."
+        ),
+        "password_cta": "Подтвердить смену пароля",
     },
 }
 
@@ -565,5 +581,31 @@ def change_confirmation_message(
         _greeting(lang, user_name)
         + f'<p style="margin:0 0 8px;">{escape(body_text)}</p>'
         + _cta(link, _t(lang, "change_cta"))
+    )
+    return subject, text, _email_html(lang, body)
+
+
+def password_confirmation_message(
+    user_name: str,
+    token: str,
+    lang: str = "en",
+) -> tuple[str, str, str]:
+    """Subject/text/html for the password-change confirmation email (§2.13).
+
+    Sent to the user's **current** address. The token carries the pending
+    new-password hash; the confirm endpoint applies it on success.
+    """
+    link = _confirm_url(token)
+    subject = _t(lang, "password_subject")
+    text = (
+        f"{_t(lang, 'greeting').format(name=user_name)}\n\n"
+        + _t(lang, "password_body")
+        + f"\n{link}\n\n"
+        + f"{_t(lang, 'signoff_plain')}"
+    )
+    body = (
+        _greeting(lang, user_name)
+        + f'<p style="margin:0 0 8px;">{escape(_t(lang, "password_body"))}</p>'
+        + _cta(link, _t(lang, "password_cta"))
     )
     return subject, text, _email_html(lang, body)
