@@ -28,6 +28,7 @@ export function ReceiptUpload({ expense, groupId }: { expense: ExpenseOut; group
   const [error, setError] = useState('')
   const [viewUrl, setViewUrl] = useState<string | null>(null)
   const [viewKind, setViewKind] = useState<ViewKind>('image')
+  const [confirmRemove, setConfirmRemove] = useState(false)
 
   // Revoke the object URL whenever it changes (covers close and unmount).
   useEffect(() => {
@@ -66,6 +67,7 @@ export function ReceiptUpload({ expense, groupId }: { expense: ExpenseOut; group
     setError('')
     try {
       await remove.mutateAsync()
+      setConfirmRemove(false)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t('receipt.removeError'))
     }
@@ -104,7 +106,7 @@ export function ReceiptUpload({ expense, groupId }: { expense: ExpenseOut; group
               <IconUpload />
               {t('receipt.replace')}
             </Button>
-            <Button variant="secondary" busy={remove.isPending} onClick={() => void onRemove()}>
+            <Button variant="secondary" busy={remove.isPending} onClick={() => setConfirmRemove(true)}>
               <IconTrash />
               {t('receipt.remove')}
             </Button>
@@ -128,6 +130,19 @@ export function ReceiptUpload({ expense, groupId }: { expense: ExpenseOut; group
               className="h-[70vh] w-full rounded-md border border-gray-200"
             />
           )}
+        </Modal>
+      ) : null}
+      {confirmRemove ? (
+        <Modal title={t('receipt.removeModalTitle')} onClose={() => setConfirmRemove(false)}>
+          <p className="text-sm text-gray-700">{t('receipt.removeModalBody')}</p>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="secondary" onClick={() => setConfirmRemove(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button variant="danger" busy={remove.isPending} onClick={() => void onRemove()}>
+              {t('receipt.remove')}
+            </Button>
+          </div>
         </Modal>
       ) : null}
     </div>

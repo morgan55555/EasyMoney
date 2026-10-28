@@ -106,6 +106,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [receiptError, setReceiptError] = useState('')
   const [openFull, setOpenFull] = useState(false)
+  const [confirmRemoveReceipt, setConfirmRemoveReceipt] = useState(false)
 
   // Load the receipt as an object URL; revoke the previous one on change/unmount.
   useEffect(() => {
@@ -190,6 +191,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
       // setAttachment(null) also revokes the preview URL via its effect.
       setAttachment(null)
       setOpenFull(false)
+      setConfirmRemoveReceipt(false)
     } catch (e) {
       setReceiptError(e instanceof ApiError ? e.message : t('receipt.removeError'))
     }
@@ -475,7 +477,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
               <IconUpload />
               {t('receipt.replace')}
             </Button>
-            <Button variant="secondary" busy={receiptDelete.isPending} onClick={() => void removeReceipt()}>
+            <Button variant="secondary" busy={receiptDelete.isPending} onClick={() => setConfirmRemoveReceipt(true)}>
               <IconTrash />
               {t('receipt.remove')}
             </Button>
@@ -510,6 +512,19 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
           ) : (
             <iframe src={previewUrl} title={t('receipt.file')} className="h-[70vh] w-full rounded-md border border-gray-200" />
           )}
+        </Modal>
+      ) : null}
+      {confirmRemoveReceipt ? (
+        <Modal title={t('receipt.removeModalTitle')} onClose={() => setConfirmRemoveReceipt(false)}>
+          <p className="text-sm text-gray-700">{t('receipt.removeModalBody')}</p>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="secondary" onClick={() => setConfirmRemoveReceipt(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button variant="danger" busy={receiptDelete.isPending} onClick={() => void removeReceipt()}>
+              {t('receipt.remove')}
+            </Button>
+          </div>
         </Modal>
       ) : null}
     </div>

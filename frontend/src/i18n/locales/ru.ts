@@ -296,6 +296,8 @@ export const ru: Dict = {
   'receipt.replace': 'Заменить',
   'receipt.remove': 'Удалить чек',
   'receipt.removeError': 'Не удалось удалить чек',
+  'receipt.removeModalTitle': 'Удалить чек',
+  'receipt.removeModalBody': 'Удалить чек с этого расхода? Файл будет удалён, восстановить его нельзя.',
   'receipt.attach': 'Прикрепить чек',
   'receipt.uploadError': 'Не удалось загрузить',
   'receipt.loadError': 'Не удалось загрузить чек',

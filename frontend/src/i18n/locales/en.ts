@@ -295,6 +295,8 @@ export const en: Dict = {
   'receipt.replace': 'Replace',
   'receipt.remove': 'Remove receipt',
   'receipt.removeError': 'Could not remove the receipt',
+  'receipt.removeModalTitle': 'Remove receipt',
+  'receipt.removeModalBody': 'Remove the receipt from this expense? The file will be deleted and cannot be recovered.',
   'receipt.attach': 'Attach receipt',
   'receipt.uploadError': 'Upload failed',
   'receipt.loadError': 'Could not load the receipt',
