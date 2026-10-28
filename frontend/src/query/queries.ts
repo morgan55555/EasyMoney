@@ -347,6 +347,20 @@ export function useDeleteReceipt(groupId: number | null, expenseId: number) {
   })
 }
 
+/**
+ * Upload a receipt to an expense whose id is only known at call time (the
+ * "add expense" flow: the expense is created first, then the picked file is
+ * attached to it). Unlike {@link useUploadReceipt}, the expense id is part of
+ * the mutation variable rather than the hook argument.
+ */
+export function useUploadReceiptTo(groupId: number | null) {
+  const invalidate = useInvalidateGroup(groupId)
+  return useMutation({
+    mutationFn: (vars: { expenseId: number; file: File }) => api.expensesApi.uploadReceipt(vars.expenseId, vars.file),
+    onSuccess: invalidate,
+  })
+}
+
 export function useProposeSettlement(groupId: number) {
   const qc = useQueryClient()
   return useMutation({

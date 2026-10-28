@@ -153,6 +153,8 @@ export const en: Dict = {
   'expenseForm.include': 'Include {{name}}',
   'expenseForm.searchMembers': 'Search members…',
   'expenseForm.currentReceipt': 'Current receipt',
+  'expenseForm.receipt': 'Receipt',
+  'expenseForm.receiptHint': 'Optional — attach it now or later from the expense.',
   'expenseForm.sharesTotal': 'Shares total {{total}}',
   'expenseForm.matchesAmount': ' — matches the amount.',
   'expenseForm.expectedAmount': ' — expected {{amount}}.',

@@ -16,12 +16,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { ApiError } from '../api/client'
 import { fetchAttachmentBlob } from '../api/endpoints'
-import { Button, ErrorText, Field, IconTrash, IconUpload, Modal, Select, TextInput, Textarea } from '../components/ui'
+import { Button, ErrorText, Field, IconPaperclip, IconTrash, IconUpload, Modal, Select, TextInput, Textarea } from '../components/ui'
 import { useI18n, type TFunc } from '../i18n'
 import { formatMoney } from '../lib/money'
 import { localTodayIso } from '../lib/dates'
 import { previewSplit, sumExactShares, type SplitPreviewRow } from '../lib/split'
-import { useCreateExpense, useDeleteReceipt, useMe, useUploadReceipt, useUpdateExpense } from '../query/queries'
+import { useCreateExpense, useDeleteReceipt, useMe, useUploadReceipt, useUploadReceiptTo, useUpdateExpense } from '../query/queries'
 import type { AttachmentOut, ExpenseOut, MemberOut, SplitMethod } from '../types'
 import { ACCEPT } from './ReceiptUpload'
 
@@ -131,6 +131,43 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
     }
   }, [attachment])
 
+  // --- Pending receipt (add mode) ---------------------------------------------------
+  // The receipt can't be uploaded until the expense exists
+  // (POST /expenses/{id}/receipt, §3.5), so in the add flow we keep the picked
+  // File locally, preview it from an object URL, and upload it right after the
+  // expense is created in submit().
+  const uploadToReceipt = useUploadReceiptTo(groupId)
+  const pendingInputRef = useRef<HTMLInputElement>(null)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [pendingPreview, setPendingPreview] = useState<string | null>(null)
+  // Guard against creating a duplicate expense if a retry re-runs submit()
+  // after the receipt upload — not the expense creation — failed.
+  const createdIdRef = useRef<number | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  // Object URL for the pending file: create on change, revoke on change/unmount.
+  useEffect(() => {
+    if (!pendingFile) {
+      setPendingPreview(null)
+      return
+    }
+    const url = URL.createObjectURL(pendingFile)
+    setPendingPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [pendingFile])
+
+  const pickPendingFile = (file: File | undefined) => {
+    if (!file) return
+    setReceiptError('')
+    setPendingFile(file)
+    if (pendingInputRef.current) pendingInputRef.current.value = ''
+  }
+
+  const clearPendingFile = () => {
+    setReceiptError('')
+    setPendingFile(null)
+  }
+
   const replaceReceipt = async (file: File | undefined) => {
     if (!file) return
     setReceiptError('')
@@ -164,6 +201,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
       ? ordered
       : ordered.filter((m) => m.display_name.toLowerCase().includes(query.trim().toLowerCase()))
   const isPreviewImage = attachment?.content_type.startsWith('image/') ?? false
+  const isPendingImage = pendingFile?.type.startsWith('image/') ?? false
 
   const preview = useMemo(
     () =>
@@ -193,7 +231,9 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
   }
 
   const submit = async () => {
+    if (submitting) return
     setError('')
+    setReceiptError('')
     const participants = participantsInOrder.map((m) => {
       const base = { user_id: m.id }
       if (method === 'weighted') return { ...base, weight: (weights[m.id] ?? '1').trim() || '1' }
@@ -210,15 +250,36 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
       comment: comment.trim() === '' ? null : comment.trim(),
       participants,
     }
+    setSubmitting(true)
     try {
-      if (initial) {
-        await updateExpense.mutateAsync({ id: initial.id, data: body })
-      } else {
-        await createExpense.mutateAsync(body)
+      // Create/update first — the receipt endpoint needs the expense id.
+      let expenseId = createdIdRef.current
+      if (expenseId === null) {
+        if (initial) {
+          await updateExpense.mutateAsync({ id: initial.id, data: body })
+          expenseId = initial.id
+        } else {
+          const created = await createExpense.mutateAsync(body)
+          createdIdRef.current = created.id
+          expenseId = created.id
+        }
+      }
+      // Add mode: attach the picked receipt now that the expense exists.
+      if (!initial && pendingFile) {
+        await uploadToReceipt.mutateAsync({ expenseId, file: pendingFile })
       }
       onDone()
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t('expenses.saveError'))
+      // If the expense was already created and only the receipt upload failed,
+      // keep the modal open (and remember the id) so a retry re-uploads without
+      // creating a second expense.
+      if (!initial && pendingFile && createdIdRef.current !== null) {
+        setReceiptError(e instanceof ApiError ? e.message : t('receipt.uploadError'))
+      } else {
+        setError(e instanceof ApiError ? e.message : t('expenses.saveError'))
+      }
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -343,6 +404,48 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
         <ErrorText>{localizePreviewError((preview as { error: string }).error, t)}</ErrorText>
       ) : null}
 
+      {!initial ? (
+        <div className="rounded-md border border-gray-200 p-3 space-y-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-sm font-medium text-gray-700">{t('expenseForm.receipt')}</p>
+            <p className="text-xs text-gray-500">{t('expenseForm.receiptHint')}</p>
+          </div>
+          <input
+            ref={pendingInputRef}
+            type="file"
+            accept={ACCEPT}
+            className="hidden"
+            onChange={(e) => pickPendingFile(e.target.files?.[0])}
+            aria-label={t('receipt.file')}
+          />
+          {pendingPreview ? (
+            <>
+              {isPendingImage ? (
+                <img src={pendingPreview} alt={t('receipt.file')} className="max-h-48 rounded-md border border-gray-200" />
+              ) : (
+                <iframe src={pendingPreview} title={t('receipt.file')} className="h-48 w-full rounded-md border border-gray-200" />
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="secondary" onClick={() => pendingInputRef.current?.click()}>
+                  <IconUpload />
+                  {t('receipt.replace')}
+                </Button>
+                <Button variant="secondary" onClick={clearPendingFile}>
+                  <IconTrash />
+                  {t('receipt.remove')}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Button variant="secondary" onClick={() => pendingInputRef.current?.click()}>
+              <IconPaperclip />
+              {t('receipt.attach')}
+            </Button>
+          )}
+          {receiptError ? <p className="text-xs text-red-600">{receiptError}</p> : null}
+        </div>
+      ) : null}
+
       {initial && attachment ? (
         <div className="rounded-md border border-gray-200 p-3 space-y-2">
           <p className="text-sm font-medium text-gray-700">{t('expenseForm.currentReceipt')}</p>
@@ -392,8 +495,8 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
         </Button>
         <Button
           onClick={() => void submit()}
-          busy={createExpense.isPending || updateExpense.isPending}
-          disabled={selected.size === 0 || !description.trim() || !amount.trim() || payerId === 0}
+          busy={submitting || createExpense.isPending || updateExpense.isPending || uploadToReceipt.isPending}
+          disabled={(selected.size === 0 || !description.trim() || !amount.trim() || payerId === 0) || submitting}
         >
           {initial ? t('expenseForm.save') : t('expenseForm.add')}
         </Button>

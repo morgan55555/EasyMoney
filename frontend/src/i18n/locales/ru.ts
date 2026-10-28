@@ -153,6 +153,8 @@ export const ru: Dict = {
   'expenseForm.include': 'Включить {{name}}',
   'expenseForm.searchMembers': 'Поиск участников…',
   'expenseForm.currentReceipt': 'Текущий чек',
+  'expenseForm.receipt': 'Чек',
+  'expenseForm.receiptHint': 'Необязательно — прикрепите сейчас или позже из расхода.',
   'expenseForm.sharesTotal': 'Доли в сумме: {{total}}',
   'expenseForm.matchesAmount': ' — совпадает с суммой.',
   'expenseForm.expectedAmount': ' — ожидается {{amount}}.',
