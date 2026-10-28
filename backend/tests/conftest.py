@@ -35,7 +35,7 @@ TEST_DATABASE_URL = "postgresql+asyncpg://easymoney:easymoney@localhost:5432/eas
 _TRUNCATE = (
     "TRUNCATE debt_reminders, activity, attachments, notifications, "
     "expense_participants, settlements, invitations, memberships, expenses, "
-    "groups, refresh_tokens, users RESTART IDENTITY CASCADE"
+    "groups, refresh_tokens, email_tokens, users RESTART IDENTITY CASCADE"
 )
 
 
