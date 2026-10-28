@@ -122,7 +122,7 @@ export function ReceiptUpload({ expense, groupId }: { expense: ExpenseOut; group
       {viewUrl ? (
         <Modal title={t('receipt.file')} onClose={() => setViewUrl(null)} wide closeOnBackdrop>
           {viewKind === 'image' ? (
-            <img src={viewUrl} alt={t('receipt.file')} className="mx-auto max-h-[70vh] w-auto rounded-md" />
+            <img src={viewUrl} alt={t('receipt.file')} className="mx-auto max-h-[70vh] max-w-full w-auto rounded-md" />
           ) : (
             <iframe
               src={viewUrl}

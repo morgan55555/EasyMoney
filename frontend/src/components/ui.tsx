@@ -395,7 +395,11 @@ export function Modal({
       }}
     >
       <div
-        className={`bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-full flex flex-col`}
+        // min-w-0: without it the box (a flex item of the centered overlay) keeps
+        // its automatic min-width = the min-content width of the form inside, so
+        // on narrow screens it refused to shrink below that and overflowed the
+        // viewport. Now it is exactly min(viewport − padding, max-w-*).
+        className={`bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full min-w-0 ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-full flex flex-col`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -407,7 +411,7 @@ export function Modal({
             ×
           </button>
         </div>
-        <div className="overflow-y-auto p-4">{children}</div>
+        <div className="min-w-0 overflow-y-auto p-4">{children}</div>
       </div>
     </div>,
     document.body,

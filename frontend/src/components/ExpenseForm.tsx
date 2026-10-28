@@ -366,14 +366,19 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
                   aria-label={t('expenseForm.include', { name: m.display_name })}
                 />
-                <span className={`flex-1 text-sm ${on ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}`}>{m.display_name}</span>
+                <span
+                  className={`flex-1 min-w-0 truncate text-sm ${on ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}`}
+                  title={m.display_name}
+                >
+                  {m.display_name}
+                </span>
                 {on && method === 'weighted' ? (
                   <TextInput
                     value={weights[m.id] ?? ''}
                     onChange={(e) => setWeights((w) => ({ ...w, [m.id]: e.target.value }))}
                     placeholder="1"
                     inputMode="decimal"
-                    className="!w-20 !py-1 text-right"
+                    className="!w-16 sm:!w-20 !py-1 text-right min-w-0"
                   />
                 ) : null}
                 {on && method === 'exact' ? (
@@ -382,7 +387,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
                     onChange={(e) => setExactAmounts((a) => ({ ...a, [m.id]: e.target.value }))}
                     placeholder="0.00"
                     inputMode="decimal"
-                    className="!w-24 !py-1 text-right"
+                    className="!w-20 sm:!w-24 !py-1 text-right min-w-0"
                   />
                 ) : null}
                 {on && (method === 'equal' || method === 'weighted') && !('error' in (preview ?? {})) ? (
@@ -425,7 +430,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
           {pendingPreview ? (
             <>
               {isPendingImage ? (
-                <img src={pendingPreview} alt={t('receipt.file')} className="max-h-48 rounded-md border border-gray-200 dark:border-gray-800" />
+                <img src={pendingPreview} alt={t('receipt.file')} className="max-h-48 max-w-full rounded-md border border-gray-200 dark:border-gray-800" />
               ) : (
                 <iframe src={pendingPreview} title={t('receipt.file')} className="h-48 w-full rounded-md border border-gray-200 dark:border-gray-800" />
               )}
@@ -455,7 +460,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('expenseForm.currentReceipt')}</p>
           {previewUrl ? (
             isPreviewImage ? (
-              <img src={previewUrl} alt={t('receipt.file')} className="max-h-48 rounded-md border border-gray-200 dark:border-gray-800" />
+              <img src={previewUrl} alt={t('receipt.file')} className="max-h-48 max-w-full rounded-md border border-gray-200 dark:border-gray-800" />
             ) : (
               <iframe src={previewUrl} title={t('receipt.file')} className="h-48 w-full rounded-md border border-gray-200 dark:border-gray-800" />
             )
@@ -510,7 +515,7 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
       {openFull && previewUrl ? (
         <Modal title={t('receipt.file')} onClose={() => setOpenFull(false)} wide closeOnBackdrop>
           {isPreviewImage ? (
-            <img src={previewUrl} alt={t('receipt.file')} className="mx-auto max-h-[70vh] w-auto rounded-md" />
+            <img src={previewUrl} alt={t('receipt.file')} className="mx-auto max-h-[70vh] max-w-full w-auto rounded-md" />
           ) : (
             <iframe src={previewUrl} title={t('receipt.file')} className="h-[70vh] w-full rounded-md border border-gray-200 dark:border-gray-800" />
           )}
