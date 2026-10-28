@@ -59,12 +59,11 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8081}
     volumes:
       - uploads:/data/uploads
-    ports:
-      # Exposed for direct debugging / curl; the app is normally reached via
-      # the frontend on :8081 (nginx proxies /api and /ws here).
-      # Commented out by default — uncomment to expose the backend directly
-      # on the host (e.g. for curl during development).
-      # - "8000:8000"
+    # The backend is reached via the frontend on :8081 (nginx proxies /api
+    # and /ws here). To expose it directly on the host for curl/debugging,
+    # add:
+    #   ports:
+    #     - "8000:8000"
     healthcheck:
       # The image is python:3.12-slim (no curl/wget), so probe with python.
       test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/api/health',timeout=3)\""]
@@ -82,8 +81,10 @@ services:
     ports:
       - "8081:80"
     healthcheck:
-      # The image is nginx:alpine, so probe with busybox wget.
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      # The image is nginx:alpine, so probe with busybox wget. Use 127.0.0.1:
+      # inside the container `localhost` resolves to ::1, where nginx does
+      # not listen.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
       interval: 5s
       timeout: 5s
       retries: 12
