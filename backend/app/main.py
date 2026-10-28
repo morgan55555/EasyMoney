@@ -19,6 +19,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api import admin as admin_api
 from app.api import auth as auth_api
 from app.api import balances as balances_api
 from app.api import expenses as expenses_api
@@ -173,6 +174,7 @@ def create_app() -> FastAPI:
     app.include_router(notifications_api.router)
     app.include_router(balances_api.router)
     app.include_router(settlements_api.router)
+    app.include_router(admin_api.router)
     app.include_router(ws_api.router)  # WS /ws?token=...
 
     return app

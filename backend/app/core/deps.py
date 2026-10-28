@@ -28,12 +28,22 @@ from app.models.user import User
 __all__ = [
     "get_db",
     "get_current_user",
+    "get_current_admin",
     "get_group_member",
     "get_group_owner",
     "get_expense_member",
     "get_attachment_member",
     "get_settlement_member",
 ]
+
+
+async def get_current_admin(
+    user: User = Depends(get_current_user),
+) -> User:
+    """Require the caller to be an admin (AGENTS.md §2.13)."""
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
 
 
 async def get_group_member(
