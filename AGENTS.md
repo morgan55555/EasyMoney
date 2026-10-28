@@ -85,7 +85,7 @@ Note: balances move only on confirmation, and they are computed on read, so if t
 ### 2.5 Editing / deleting expenses
 
 - Edit: payer, amount, date, category, comment, participants, split — any of these (creator or group owner only). Recompute shares per 2.1, write, emit `expense.updated`, push fresh balance snapshot.
-- Delete: **soft delete** (`deleted_at`). Excluded from all sums. Emits `expense.deleted`. Feed keeps the row ("Alice deleted an expense").
+- Delete: **soft delete** (`deleted_at`). Excluded from all sums. Emits `expense.deleted`. Feed keeps the row ("Alice deleted an expense"). If the expense had a receipt, the `Attachment` row and the file under `UPLOAD_DIR` are removed with it (row in the same transaction, file post-commit; a missing file is ignored).
 - No recalculation job is needed: because of invariant 4, the next read is already correct, and the pushed snapshot makes it immediate for connected tabs.
 
 ### 2.6 Notifications (in-app)

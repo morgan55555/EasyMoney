@@ -1,4 +1,5 @@
-"""Receipt lifecycle (AGENTS.md §3.5): upload, replace, delete, guards.
+"""Receipt lifecycle (AGENTS.md §3.5): upload, replace, delete, guards,
+and the receipt dying with its expense (§2.5).
 
 Drives the real app through a TestClient pointed at the test DB with an
 isolated temp ``UPLOAD_DIR``, so the file-on-disk behavior (store, replace,
@@ -231,6 +232,37 @@ class TestDelete:
         assert close.status_code == 200, close.text
         response = client.delete(f"/api/expenses/{expense_id}/receipt", headers=_auth(token1))
         assert response.status_code == 204
+
+
+class TestDeleteExpense:
+    def test_deleting_the_expense_removes_its_receipt(self, run_db, receipt_client) -> None:
+        """§2.5: the receipt dies with the expense — row and file both go."""
+        client, upload_dir = receipt_client
+        token1, _token2, expense_id = _setup(run_db, client)
+        upload = client.post(
+            f"/api/expenses/{expense_id}/receipt",
+            files={"file": ("r.png", PNG, "image/png")},
+            headers=_auth(token1),
+        )
+        assert upload.status_code == 201, upload.text
+        attachment_id = upload.json()["id"]
+        assert list(upload_dir.iterdir()) != []
+        response = client.delete(f"/api/expenses/{expense_id}", headers=_auth(token1))
+        assert response.status_code == 204
+        # The row is gone: the (still readable, soft-deleted) expense carries no
+        # attachment and the old attachment id no longer resolves.
+        expense = client.get(f"/api/expenses/{expense_id}", headers=_auth(token1)).json()
+        assert expense["attachment"] is None
+        assert list(upload_dir.iterdir()) == []
+        gone = client.get(f"/api/attachments/{attachment_id}", headers=_auth(token1))
+        assert gone.status_code == 404
+
+    def test_deleting_an_expense_without_a_receipt_is_plain(self, run_db, receipt_client) -> None:
+        client, upload_dir = receipt_client
+        token1, _token2, expense_id = _setup(run_db, client)
+        response = client.delete(f"/api/expenses/{expense_id}", headers=_auth(token1))
+        assert response.status_code == 204
+        assert list(upload_dir.iterdir()) == []
 
 
 class TestGuards:

@@ -9,7 +9,9 @@ Rules implemented here (the routers stay thin):
 * edits are allowed for the expense creator or the group owner (§2.5);
 * a closed group rejects new expenses and receipt uploads (409, §2.9);
 * deletes are soft (``deleted_at``); deleted rows stay in the feed but are
-  excluded from every balance sum (invariant 4 does the rest).
+  excluded from every balance sum (invariant 4 does the rest). The receipt
+  dies with the expense: its row goes in the same transaction, the file is
+  unlinked post-commit (a missing file is ignored).
 
 Each mutation happens in one transaction: state change + feed row +
 notification rows; the WS push goes out post-commit through ``app.ws.hook``
@@ -363,6 +365,12 @@ async def delete_expense(db: AsyncSession, expense: Expense, user: User) -> None
     if expense.deleted_at is not None:
         raise NotFound("Expense not found")
     expense.deleted_at = datetime.now(UTC)
+    # The receipt dies with the expense (§2.5/§3.5): the row goes in this
+    # transaction; the file is unlinked post-commit (it may already be gone).
+    receipt_filename: str | None = None
+    if expense.attachment is not None:
+        receipt_filename = expense.attachment.filename  # detached after the commit
+        await db.delete(expense.attachment)
     payload = {
         "id": expense.id,
         "description": expense.description,
@@ -379,6 +387,9 @@ async def delete_expense(db: AsyncSession, expense: Expense, user: User) -> None
         payload=payload,
     )
     await db.commit()
+    if receipt_filename is not None:
+        with contextlib.suppress(OSError):
+            (Path(get_settings().upload_dir) / receipt_filename).unlink()
     await ws_hook.emit_group(db, group, "expense.deleted", payload)
 
 
