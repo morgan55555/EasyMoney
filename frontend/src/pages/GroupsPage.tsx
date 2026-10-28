@@ -127,7 +127,6 @@ export function GroupsPage() {
       ) : (
         <div className="space-y-3">
           <SearchInput
-            className="max-w-md"
             value={query}
             onChange={setQuery}
             placeholder={t('groups.searchPlaceholder')}

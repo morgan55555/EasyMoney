@@ -96,7 +96,6 @@ export function ExpenseList({ groupId }: { groupId: number }) {
       ) : (
         <div className="space-y-3">
           <SearchInput
-            className="max-w-md"
             value={query}
             onChange={setQuery}
             placeholder={t('expenses.searchPlaceholder')}
