@@ -1,0 +1,340 @@
+/**
+ * Русский словарь. Плоские ключи: `t('auth.email')`.
+ * Значения могут содержать плейсхолдеры `{{param}}` (см. `t` в i18n/index.tsx).
+ * Словарь обязан покрывать ровно те же ключи, что en.ts
+ * (проверяет __tests__/locales.test.ts).
+ */
+
+import type { Dict } from './index'
+
+export const ru: Dict = {
+  // --- Переключатель языка ------------------------------------------------------
+  'lang.en': 'English',
+  'lang.ru': 'Русский',
+
+  // --- Общие -------------------------------------------------------------------
+  'common.loading': 'Загрузка…',
+  'common.close': 'Закрыть',
+  'common.cancel': 'Отмена',
+  'common.you': 'вы',
+  'common.someone': 'Кто-то',
+  'common.userById': 'Пользователь {{id}}',
+
+  // --- Навигация / каркас ---------------------------------------------------------
+  'nav.groups': 'Группы',
+  'nav.overview': 'Обзор',
+  'nav.logOut': 'Выйти',
+
+  // --- Страница входа / регистрации ----------------------------------------------
+  'auth.tagline': 'Общие расходы для поездок, квартир и любых групп.',
+  'auth.loginTitle': 'Вход',
+  'auth.registerTitle': 'Создать аккаунт',
+  'auth.email': 'Email',
+  'auth.password': 'Пароль',
+  'auth.passwordHint': 'Минимум 8 символов.',
+  'auth.displayName': 'Отображаемое имя',
+  'auth.displayNameHint': 'Необязательно — по умолчанию берётся из email.',
+  'auth.loginBtn': 'Войти',
+  'auth.registerBtn': 'Создать аккаунт',
+  'auth.noAccount': 'Ещё нет аккаунта?',
+  'auth.registerLink': 'Зарегистрироваться',
+  'auth.hasAccount': 'Уже есть аккаунт?',
+  'auth.loginLink': 'Войти',
+  'auth.errEmail': 'Введите email',
+  'auth.errEmailInvalid': 'Введите корректный email',
+  'auth.errPassword': 'Введите пароль',
+  'auth.errPasswordShort': 'Пароль должен быть не короче 8 символов',
+  'auth.somethingWentWrong': 'Что-то пошло не так',
+
+  // --- Список групп -----------------------------------------------------------------
+  'groups.title': 'Ваши группы',
+  'groups.newGroup': 'Новая группа',
+  'groups.name': 'Название',
+  'groups.namePlaceholder': 'Поездка в Берлин 2026',
+  'groups.currency': 'Валюта',
+  'groups.create': 'Создать',
+  'groups.loading': 'Загрузка групп…',
+  'groups.emptyTitle': 'Пока нет групп',
+  'groups.emptyHint': 'Создайте группу выше или примите приглашение, чтобы присоединиться.',
+  'groups.members': '{{n}} {{plural}}',
+  'groups.closed': 'закрыта',
+  'groups.balanceOwe': 'вы должны',
+  'groups.balanceSettled': 'всё рассчитано',
+  'groups.balanceOwed': 'вам должны',
+  'groups.footnote':
+    'Балансы обновляются в реальном времени для всех участников — суммы вычисляются при чтении на основе расходов и подтверждённых переводов.',
+  'groups.createError': 'Не удалось создать группу',
+
+  // --- Страница группы -------------------------------------------------------------------
+  'group.loading': 'Загрузка группы…',
+  'group.loadError': 'Не удалось загрузить эту группу.',
+  'group.closed': 'закрыта',
+  'group.active': 'активна',
+  'group.closedOn': 'закрыта {{date}}',
+  'group.reopen': 'Открыть группу',
+  'group.close': 'Закрыть группу',
+  'group.closeError': 'Не удалось закрыть группу',
+  'group.reopenError': 'Не удалось открыть группу',
+  'group.closedBanner':
+    'Группа закрыта: новые расходы добавлять нельзя. Переводы, приглашения и просмотр по-прежнему работают.',
+  'group.closedBannerOwner': 'Вы можете открыть её кнопкой выше.',
+  'group.closedBannerOther': 'Открыть может только владелец.',
+  'group.closeModalTitle': 'Закрыть группу',
+  'group.closeModalQ': 'Закрыть {{name}}?',
+  'group.closeModalBody':
+    'Пока группа закрыта, добавлять расходы нельзя. Каждый участник получит итоговое письмо-резюме (балансы, кто кому должен, рекомендуемые переводы). Её можно открыть позже.',
+  'group.reopenModalTitle': 'Открыть группу',
+  'group.reopenModalQ': 'Открыть «{{name}}»?',
+  'group.reopenModalBody': 'Снова можно будет добавлять расходы.',
+
+  // --- Вкладки группы ----------------------------------------------------------------------
+  'tab.expenses': 'Расходы',
+  'tab.balances': 'Балансы',
+  'tab.payments': 'Платежи',
+  'tab.activity': 'Активность',
+  'tab.invites': 'Приглашения',
+  'tab.people': 'Люди',
+
+  // --- Обзор -------------------------------------------------------------------------------
+  'overview.title': 'Обзор',
+  'overview.sub':
+    'Сколько вам должны во всех группах, по валютам. Конвертация между валютами не выполняется — каждая суммируется отдельно.',
+  'overview.loading': 'Загрузка ваших балансов…',
+  'overview.emptyTitle': 'Пока нет групп',
+  'overview.emptyHint': 'Создайте группу или примите приглашение, чтобы увидеть балансы здесь.',
+  'overview.noBalancesTitle': 'Нет задолженностей',
+  'overview.noBalancesHint': 'Во всех группах всё рассчитано.',
+  'overview.byCurrency': 'Балансы по валютам',
+  'overview.back': 'Назад к группам',
+
+  // --- Страница приглашения ----------------------------------------------------------------------
+  'invite.title': 'Присоединиться к группе',
+  'invite.text': 'Вас пригласили присоединиться к группе.',
+  'invite.textAuthed': ' Нажмите ниже, чтобы принять приглашение.',
+  'invite.joining': 'Присоединение…',
+  'invite.joined': 'Готово! Переходим в группу…',
+  'invite.join': 'Присоединиться',
+  'invite.needAccount': 'Для вступления нужен аккаунт.',
+  'invite.registerJoin': 'Зарегистрироваться и войти',
+  'invite.loginJoin': 'Войти и присоединиться',
+  'invite.joinError': 'Не удалось присоединиться к группе',
+
+  // --- Список расходов ---------------------------------------------------------------------------
+  'expenses.title': 'Расходы',
+  'expenses.add': 'Добавить расход',
+  'expenses.addDisabledTitle': 'Группа закрыта — новые расходы недоступны',
+  'expenses.closedNote':
+    'Группа закрыта: добавление расходов недоступно. Владелец может открыть её в шапке группы.',
+  'expenses.emptyTitle': 'Пока нет расходов',
+  'expenses.emptyHint': 'Добавьте первый расход, чтобы начать делить.',
+  'expenses.showMore': 'Показать ещё ({{n}})',
+  'expenses.loading': 'Загрузка расходов…',
+  'expenses.deleted': 'удалён',
+  'expenses.line': '{{payer}} оплатил(а) {{amount}} · {{date}} · {{split}}',
+  'expenses.edit': 'Изменить',
+  'expenses.delete': 'Удалить',
+  'expenses.modalNew': 'Новый расход',
+  'expenses.modalEdit': 'Изменить расход #{{id}}',
+  'expenses.deleteModalTitle': 'Удалить расход',
+  'expenses.deleteModalBody':
+    'Удалить «{{desc}}» ({{amount}})? Балансы пересчитаются автоматически; в ленте останется запись об удалении.',
+  'expenses.saveError': 'Не удалось сохранить расход',
+
+  // --- Форма расхода ----------------------------------------------------------------------------
+  'expenseForm.description': 'Описание',
+  'expenseForm.descriptionPh': 'Ужин с командой',
+  'expenseForm.amount': 'Сумма ({{currency}})',
+  'expenseForm.paidBy': 'Оплатил(а)',
+  'expenseForm.date': 'Дата',
+  'expenseForm.category': 'Категория',
+  'expenseForm.splitMethod': 'Способ деления',
+  'expenseForm.participants': 'Участники',
+  'expenseForm.participantsExact': 'Участники (каждый получает свою точную долю)',
+  'expenseForm.include': 'Включить {{name}}',
+  'expenseForm.searchMembers': 'Поиск участников…',
+  'expenseForm.currentReceipt': 'Текущий чек',
+  'expenseForm.sharesTotal': 'Доли в сумме: {{total}}',
+  'expenseForm.matchesAmount': ' — совпадает с суммой.',
+  'expenseForm.expectedAmount': ' — ожидается {{amount}}.',
+  'expenseForm.comment': 'Комментарий',
+  'expenseForm.commentHint': 'Необязательно.',
+  'expenseForm.commentPh': 'Что-нибудь запомнить?',
+  'expenseForm.save': 'Сохранить изменения',
+  'expenseForm.add': 'Добавить расход',
+
+  // --- Способы деления (кнопки формы / подписи в списке) ----------------------------------------------
+  'split.equal': 'Равное',
+  'split.weighted': 'По весам',
+  'split.exact': 'Точные суммы',
+  'splitLine.equal': 'равное деление',
+  'splitLine.weighted': 'деление по весам',
+  'splitLine.exact': 'точные суммы',
+
+  // --- Категории ------------------------------------------------------------------------------------
+  'category.food': 'еда',
+  'category.transport': 'транспорт',
+  'category.housing': 'жильё',
+  'category.entertainment': 'развлечения',
+  'category.shopping': 'покупки',
+  'category.health': 'здоровье',
+  'category.other': 'прочее',
+
+  // --- Ошибки предпросмотра деления (карта английских сообщений lib/split.ts) ---------------------------
+  'splitErr.enterAmount': 'Введите сумму.',
+  'splitErr.tooManyDecimals':
+    'Валюта {{currency}} допускает {{digits}} знак(а/ов) после запятой; в сумме их больше.',
+  'splitErr.positive': 'Введите сумму больше нуля.',
+  'splitErr.pickParticipant': 'Выберите хотя бы одного участника.',
+  'splitErr.positiveWeights': 'Веса должны быть положительными числами.',
+
+  // --- Панель балансов --------------------------------------------------------------------------------
+  'balances.loading': 'Загрузка балансов…',
+  'balances.your': 'Ваш баланс',
+  'balances.settledAll': 'Все расчёты завершены.',
+  'balances.owe': 'Вы должны группе эту сумму.',
+  'balances.owed': 'Группа должна вам эту сумму.',
+  'balances.propose': 'Предложить перевод',
+  'balances.emptyTitle': 'Всё рассчитано',
+  'balances.emptyHint': 'Никто никому не должен в этой группе.',
+  'balances.memberBalances': 'Балансы участников',
+  'balances.suggested': 'Рекомендуемые переводы',
+  'balances.suggestedHint':
+    'Минимальное число переводов, чтобы расчётались все (≤ n−1). Используйте их как отправную точку — можно предложить и любую частичную сумму.',
+  'balances.noTransfers': 'Переводы не нужны.',
+  'balances.settle': 'Рассчитаться',
+  'balances.whoOwesWhom': 'Кто кому должен',
+  'balances.noDebts': 'Нет задолженностей.',
+
+  // --- Платежи / расчёты ------------------------------------------------------------------------------
+  'payments.title': 'Платежи',
+  'payments.proposeNew': 'Новый перевод',
+  'payments.loading': 'Загрузка платежей…',
+  'payments.pendingTitle': 'Ожидают',
+  'payments.noPending': 'Нет ожидающих переводов.',
+  'payments.youProposed': 'Вы предложили этот перевод — ждём подтверждения от другого участника.',
+  'payments.waitingYou': 'Ждём вашего подтверждения или отклонения.',
+  'payments.reject': 'Отклонить',
+  'payments.confirm': 'Подтвердить',
+  'payments.cancel': 'Отменить',
+  'payments.historyTitle': 'История',
+  'payments.emptyTitle': 'Пока нет платежей',
+  'payments.emptyHint': 'Предложите перевод на вкладке «Балансы» или здесь.',
+  'payments.confirmModalTitle': 'Подтвердить перевод',
+  'payments.confirmModalBody':
+    'Подтвердите, что {{name}} заплатил(а) вам {{amount}}? Платёж будет учтён в балансах всех участников.',
+
+  // --- Состояния переводов ------------------------------------------------------------------------------
+  'state.pending': 'ожидает',
+  'state.confirmed': 'подтверждён',
+  'state.rejected': 'отклонён',
+  'state.cancelled': 'отменён',
+
+  // --- Модальное окно предложения перевода -----------------------------------------------------------------
+  'propose.title': 'Предложить перевод',
+  'propose.body1': 'Предложите перевод участнику, которому вы должны. Он остаётся ',
+  'propose.pendingWord': 'неподтверждённым',
+  'propose.body2': ' до тех пор, пока его не подтвердят — только тогда он повлияет на балансы.',
+  'propose.oweNoOne': 'Вы сейчас никому не должны в этой группе.',
+  'propose.payTo': 'Кому платить',
+  'propose.choose': 'Выбрать…',
+  'propose.amount': 'Сумма ({{currency}})',
+  'propose.hint': 'Вы должны {{amount}}. Допускаются частичные платежи.',
+  'propose.errPick': 'Выберите, кому платить.',
+  'propose.errAmount': 'Введите сумму больше нуля.',
+  'propose.errTooLarge': 'Вы должны {{amount}} пользователю {{name}} — сумма слишком большая.',
+  'propose.sendError': 'Не удалось отправить предложение',
+  'propose.send': 'Отправить',
+
+  // --- Лента активности -------------------------------------------------------------------------------------
+  'feed.loading': 'Загрузка активности…',
+  'feed.emptyTitle': 'Пока нет активности',
+  'feed.emptyHint': 'Здесь будут появляться расходы, платежи и изменения состава.',
+  'feed.title': 'Активность',
+  'feed.loadOlder': 'Показать старые',
+  'feed.expenseCreated': '{{actor}} добавил(а) «{{desc}}» ({{amount}})',
+  'feed.expenseUpdated': '{{actor}} изменил(а) «{{desc}}» ({{amount}})',
+  'feed.expenseDeleted': '{{actor}} удалил(а) расход',
+  'feed.deletedDesc': ': «{{desc}}»',
+  'feed.settlementCreated': '{{actor}} предложил(а) перевод на {{amount}} — {{to}}',
+  'feed.settlementConfirmed': '{{actor}} рассчитался(ась) с {{to}}: {{amount}}',
+  'feed.settlementRejected': 'перевод {{actor}} на {{amount}} отклонён',
+  'feed.settlementCancelled': 'перевод {{actor}} на {{amount}} отменён',
+  'feed.memberJoined': '{{actor}} присоединился(ась) к группе',
+  'feed.memberLeft': '{{actor}} покинул(а) группу',
+  'feed.groupClosed': '{{actor}} закрыл(а) группу',
+  'feed.groupReopened': '{{actor}} открыл(а) группу',
+  'feed.groupCreated': '{{actor}} создал(а) группу «{{name}}»',
+
+  // --- Колокольчик уведомлений ---------------------------------------------------------------------------------
+  'notif.title': 'Уведомления',
+  'notif.unread': '{{n}} непрочитанных',
+  'notif.markRead': 'Прочитать все',
+  'notif.loading': 'Загрузка…',
+  'notif.empty': 'Пока нет уведомлений.',
+  'notif.payerAdded': '{{payer}} добавил(а)',
+  'notif.newExpense': 'Новый расход',
+  'notif.expenseUpdated': 'Расход изменён: {{desc}} ({{amount}})',
+  'notif.expenseDeleted': 'Расход удалён: {{desc}}',
+  'notif.anExpense': 'расход',
+  'notif.settlementCreated': '{{from}} предложил(а) перевод на {{amount}} — {{to}}',
+  'notif.settlementConfirmed': '{{from}} рассчитался(ась) с {{to}}: {{amount}}',
+  'notif.settlementRejected': 'Перевод на {{amount}} отклонён',
+  'notif.settlementCancelled': 'Перевод на {{amount}} отменён',
+  'notif.memberJoined': '{{name}} присоединился(ась) к группе',
+  'notif.memberLeft': '{{name}} покинул(а) группу',
+  'notif.aMember': 'Участник',
+  'notif.groupClosed': 'Группа была закрыта',
+  'notif.groupReopened': 'Группа была открыта снова',
+
+  // --- Чеки ----------------------------------------------------------------------------------------------------------
+  'receipt.view': 'Посмотреть чек',
+  'receipt.viewPdf': 'Посмотреть PDF',
+  'receipt.viewFile': 'Посмотреть файл',
+  'receipt.replace': 'Заменить',
+  'receipt.remove': 'Удалить чек',
+  'receipt.removeError': 'Не удалось удалить чек',
+  'receipt.attach': 'Прикрепить чек',
+  'receipt.uploadError': 'Не удалось загрузить',
+  'receipt.loadError': 'Не удалось загрузить чек',
+  'receipt.file': 'Файл чека',
+  'receipt.close': 'Закрыть',
+  'receipt.openFull': 'Открыть в полный размер',
+
+  // --- Панель участников -------------------------------------------------------------------------------------------
+  'people.loading': 'Загрузка участников…',
+  'people.leave': 'Покинуть группу',
+  'people.leaveError': 'Не удалось покинуть группу',
+  'people.members': 'Участники ({{n}})',
+  'people.owner': 'владелец',
+  'people.joined': 'в группе с {{date}}',
+  'people.remove': 'Удалить',
+  'people.removeModalTitle': 'Удалить участника',
+  'people.removeModalBody':
+    'Удалить {{name}} из группы? Его прошлые расходы и доли сохранятся; он просто потеряет доступ к группе.',
+  'people.removeError': 'Не удалось удалить участника',
+  'people.leaveModalTitle': 'Покинуть группу',
+  'people.leaveModalBody':
+    'Покинуть эту группу? Вы потеряете доступ к её расходам и балансам. Если у вас есть задолженность, она продолжит учитываться — вы можете рассчитаться и после выхода.',
+  'people.leaveConfirm': 'Покинуть',
+
+  // --- Панель приглашений --------------------------------------------------------------------------------------------------
+  'invites.title': 'Пригласить людей',
+  'invites.hint': 'Поделитесь ссылкой, по которой можно присоединиться, или отправьте приглашение на конкретный email.',
+  'invites.createLink': 'Создать ссылку',
+  'invites.emailInvite': 'Пригласить по email',
+  'invites.copyError': 'Не удалось скопировать ссылку — выделите её и скопируйте вручную.',
+  'invites.createError': 'Не удалось создать приглашение',
+  'invites.emailError': 'Введите email для приглашения.',
+  'invites.active': 'Активные приглашения ({{n}})',
+  'invites.noActive': 'Нет активных приглашений.',
+  'invites.expires': 'действует до {{date}}',
+  'invites.copied': 'Скопировано!',
+  'invites.copy': 'Копировать',
+  'invites.revoke': 'Отозвать',
+  'invites.usedRevoked': 'Использованные / отозванные',
+  'inviteKind.link': 'ссылка',
+  'inviteKind.email': 'email',
+  'inviteStatus.active': 'активно',
+  'inviteStatus.used': 'использовано',
+  'inviteStatus.revoked': 'отозвано',
+}

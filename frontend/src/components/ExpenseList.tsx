@@ -1,0 +1,203 @@
+/**
+ * Expense list (F5): newest first, per-expense participants with their exact
+ * shares, receipt upload, edit/delete for the creator or the group owner.
+ * Only active expenses are listed — the backend hides soft-deleted rows.
+ */
+
+import { useState } from 'react'
+
+import { useI18n, type TFunc } from '../i18n'
+import { formatDate } from '../lib/dates'
+import { formatMoney } from '../lib/money'
+import { useDeleteExpense, useExpenses, useGroup, useMembers, useMe } from '../query/queries'
+import type { ExpenseOut } from '../types'
+import { Button, Card, EmptyState, IconEdit, IconButton, IconTrash, Modal, Spinner } from './ui'
+import { ExpenseForm } from './ExpenseForm'
+import { ReceiptUpload } from './ReceiptUpload'
+
+// "Show more" pagination (UI-F1): render the first N, the button loads N more —
+// a 1000-expense group keeps a bounded DOM, same pattern as the feed.
+const PAGE_SIZE = 50
+
+/**
+ * Render a category label without leaking a raw i18n key. An unknown category
+ * value has no `category.<value>` key, so t() returns the key string itself;
+ * in that case show the raw value (capitalized) instead.
+ */
+function categoryLabel(t: TFunc, category: string): string {
+  const key = 'category.' + category
+  const translated = t(key)
+  if (translated === key) return category.charAt(0).toUpperCase() + category.slice(1)
+  return translated
+}
+
+export function ExpenseList({ groupId }: { groupId: number }) {
+  const expenses = useExpenses(groupId)
+  const members = useMembers(groupId)
+  const group = useGroup(groupId)
+  const me = useMe()
+  const del = useDeleteExpense(groupId)
+  const { t, locale } = useI18n()
+  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState<ExpenseOut | null>(null)
+  const [deleting, setDeleting] = useState<ExpenseOut | null>(null)
+  const [visible, setVisible] = useState(PAGE_SIZE)
+
+  const currency = group.data?.currency ?? 'EUR'
+  if (expenses.isPending) return <Spinner label={t('expenses.loading')} />
+
+  const list = expenses.data ?? []
+  const closed = group.data?.status === 'closed'
+  const canManage = (e: ExpenseOut) =>
+    (me.data?.id ?? -1) === e.created_by || (me.data?.id ?? -1) === (group.data?.created_by ?? -1)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-800">{t('expenses.title')}</h2>
+        <Button
+          onClick={() => {
+            setEditing(null)
+            setShowForm(true)
+          }}
+          disabled={closed}
+          title={closed ? t('expenses.addDisabledTitle') : undefined}
+        >
+          {t('expenses.add')}
+        </Button>
+      </div>
+
+      {closed ? (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          {t('expenses.closedNote')}
+        </p>
+      ) : null}
+
+      {list.length === 0 ? (
+        <Card>
+          <EmptyState title={t('expenses.emptyTitle')} hint={t('expenses.emptyHint')} />
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {list.slice(0, visible).map((e) => (
+            <Card key={e.id}>
+              <div className="p-4 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-medium text-gray-900 truncate">{e.description}</h3>
+                      <span className="text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">
+                        {categoryLabel(t, e.category)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {t('expenses.line', {
+                        payer: e.payer,
+                        amount: formatMoney(e.amount, currency, locale),
+                        date: formatDate(e.date, locale),
+                        split: t('splitLine.' + e.split_method),
+                      })}
+                    </p>
+                    {e.comment ? <p className="text-sm text-gray-600 mt-1">{e.comment}</p> : null}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-lg font-semibold text-gray-900 tabular-nums">
+                      {formatMoney(e.amount, currency, locale)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                  {e.participants.map((p) => (
+                    <span key={p.user_id}>
+                      {p.display_name}: <span className="tabular-nums">{formatMoney(p.share, currency, locale)}</span>
+                    </span>
+                  ))}
+                </div>
+
+                {/* items-start: the receipt block also reserves a 20px error slot below
+                    its buttons, so centering would sink the Edit/Delete icons a half-row.
+                    Top-aligning keeps every action on one visual row (no reflow on error). */}
+                <div className="flex flex-wrap items-start justify-between gap-2 pt-1 border-t border-gray-100">
+                  <ReceiptUpload expense={e} groupId={groupId} />
+                  <div className="flex gap-2">
+                    <IconButton
+                      title={t('expenses.edit')}
+                      onClick={() => {
+                        setEditing(e)
+                        setShowForm(true)
+                      }}
+                      disabled={!canManage(e)}
+                    >
+                      <IconEdit />
+                    </IconButton>
+                    <IconButton
+                      title={t('expenses.delete')}
+                      variant="danger"
+                      onClick={() => setDeleting(e)}
+                      disabled={!canManage(e)}
+                    >
+                      <IconTrash />
+                    </IconButton>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ))}
+          {visible < list.length ? (
+            <div className="text-center pt-1">
+              <Button variant="ghost" onClick={() => setVisible((v) => v + PAGE_SIZE)}>
+                {t('expenses.showMore', { n: Math.min(PAGE_SIZE, list.length - visible) })}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {showForm && members.data ? (
+        <Modal
+          title={
+            editing
+              ? t('expenses.modalEdit', { id: editing.id })
+              : t('expenses.modalNew')
+          }
+          onClose={() => setShowForm(false)}
+          wide
+        >
+          <ExpenseForm
+            groupId={groupId}
+            members={members.data}
+            currency={group.data?.currency ?? 'EUR'}
+            initial={editing ?? undefined}
+            onDone={() => setShowForm(false)}
+          />
+        </Modal>
+      ) : null}
+
+      {deleting ? (
+        <Modal title={t('expenses.deleteModalTitle')} onClose={() => setDeleting(null)}>
+          <p className="text-sm text-gray-700">
+            {t('expenses.deleteModalBody', {
+              desc: deleting.description,
+              amount: formatMoney(deleting.amount, currency, locale),
+            })}
+          </p>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="secondary" onClick={() => setDeleting(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="danger"
+              busy={del.isPending}
+              onClick={() =>
+                void del.mutateAsync(deleting.id).then(() => setDeleting(null)).catch(() => setDeleting(null))
+              }
+            >
+              {t('expenses.delete')}
+            </Button>
+          </div>
+        </Modal>
+      ) : null}
+    </div>
+  )
+}

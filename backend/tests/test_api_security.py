@@ -1,0 +1,156 @@
+"""API-layer security regressions (PLAN WS2): A-7, X-1, H-7/H-14, H-16, S-2.
+
+These drive the real FastAPI app (``create_app``) through a TestClient with
+its database pointed at the test DB, so the full path — request parsing,
+auth, dependency resolution, domain mapping, and the custom error handlers —
+is exercised. The client is session-scoped and used as a context manager so
+the app engine's pooled connections stay on one event loop.
+"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Iterator
+from datetime import UTC, datetime
+
+import jwt
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.core import security
+from app.core.config import get_settings
+from app.main import create_app
+from app.models.user import User
+from app.services import groups as groups_service
+
+# Must stay in sync with conftest.TEST_DATABASE_URL.
+TEST_DATABASE_URL = "postgresql+asyncpg://easymoney:easymoney@localhost:5432/easymoney_test"
+
+
+@pytest.fixture(scope="session")
+def api_client() -> Iterator[TestClient]:
+    """The real app with its settings pointed at the test database."""
+    original = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+    get_settings.cache_clear()
+    app = create_app()
+    with TestClient(app) as client:  # lifespan: ws manager + idle scheduler
+        yield client
+    if original is None:
+        os.environ.pop("DATABASE_URL", None)
+    else:
+        os.environ["DATABASE_URL"] = original
+    get_settings.cache_clear()
+
+
+def _auth(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _craft_token(sub: str) -> str:
+    """A signature-valid access token with a caller-chosen ``sub``."""
+    settings = get_settings()
+    payload = {"sub": sub, "type": "access", "exp": int(datetime.now(UTC).timestamp()) + 600}
+    return jwt.encode(payload, settings.jwt_secret, algorithm=security.ALGORITHM)
+
+
+def _register_user_1(run_db) -> str:
+    """Truncate the test DB, create user 1 with group 1, return an access token.
+
+    The group exists because FastAPI resolves route dependencies (group
+    lookup) before the request body — body-validation tests still need a
+    resolvable group to reach the 422.
+    """
+
+    async def _scenario(factory: async_sessionmaker[AsyncSession]) -> None:
+        async with factory() as db:
+            db.add(User(id=1, email="a@test.local", password_hash="x", display_name="A"))
+            await db.commit()
+            user = await db.get(User, 1)
+            assert user is not None
+            await groups_service.create_group(db, user, "G1", "USD")
+            await db.commit()
+
+    run_db(_scenario)
+    return security.create_access_token(1)
+
+
+def _expense_body(amount: str) -> str:
+    return (
+        '{"payer_id":1,"description":"x","date":"2026-01-01",'
+        f'"participants":[{{"user_id":1}}],"amount":{amount}}}'
+    )
+
+
+class TestCraftedTokens:
+    """A-7: hostile ``sub`` claims must be a clean 401, never a traceback."""
+
+    def test_non_integer_sub_is_401(self, api_client) -> None:
+        response = api_client.get("/api/me", headers=_auth(_craft_token("12abc")))
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Invalid token"
+
+    def test_out_of_range_sub_is_401(self, api_client) -> None:
+        # Parses as a Python int but overflows BIGINT: must be rejected before
+        # it ever reaches the database.
+        response = api_client.get("/api/me", headers=_auth(_craft_token("100000000000000000000")))
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Invalid token"
+
+
+class TestOutOfRangeIds:
+    def test_20_digit_group_id_is_404(self, run_db, api_client) -> None:
+        """X-1: a 20-digit path id overflows asyncpg's int64 binding; the app
+        must answer a clean 404 instead of a 500."""
+        token = _register_user_1(run_db)
+        response = api_client.get("/api/groups/99999999999999999999", headers=_auth(token))
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Not found"}
+
+
+class TestHostileMoneyBodies:
+    """H-7/H-14/H-16: hostile money payloads must be a clean, parseable 422."""
+
+    def test_raw_json_nan_is_422_not_500(self, run_db, api_client) -> None:
+        # A raw JSON NaN used to make the 422 body itself fail to render
+        # (allow_nan=False) and turn the 422 into a 500.
+        token = _register_user_1(run_db)
+        response = api_client.post(
+            "/api/groups/1/expenses",
+            content=_expense_body("NaN"),
+            headers={**_auth(token), "Content-Type": "application/json"},
+        )
+        assert response.status_code == 422
+        detail = response.json()["detail"]  # the body must be renderable JSON
+        assert any("amount" in loc for err in detail for loc in map(str, err["loc"]))
+
+    @pytest.mark.parametrize(
+        "raw_amount",
+        [
+            '"-0.001"',  # sub-precision string (H-7)
+            '"1e-7"',  # scientific-notation string (H-14)
+            "1e-7",  # scientific-notation number (H-14)
+            '"1.2345"',  # finer than any supported currency (3 digits)
+        ],
+    )
+    def test_sub_precision_amounts_are_422(self, run_db, api_client, raw_amount: str) -> None:
+        token = _register_user_1(run_db)
+        response = api_client.post(
+            "/api/groups/1/expenses",
+            content=_expense_body(raw_amount),
+            headers={**_auth(token), "Content-Type": "application/json"},
+        )
+        assert response.status_code == 422
+        response.json()  # clean, parseable 422 body
+
+
+class TestWebsocketHardening:
+    def test_binary_frame_is_ignored_then_ping_answered(self, run_db, api_client) -> None:
+        """S-2: a binary frame must not kill the socket; a text ping after it
+        still gets a pong."""
+        token = _register_user_1(run_db)
+        with api_client.websocket_connect(f"/ws?token={token}") as ws:
+            ws.send_bytes(b"\x00\x01\x02")
+            ws.send_text("ping")
+            assert ws.receive_text() == "pong"

@@ -1,0 +1,12 @@
+# Normalize text files to LF everywhere (Docker/CI on any OS).
+* text=auto eol=lf
+
+# Binaries stay binary.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.mp3 binary
+*.pdf binary

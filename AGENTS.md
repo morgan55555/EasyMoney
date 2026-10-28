@@ -1,0 +1,301 @@
+# AGENTS.md — EasyMoney
+
+Instructions for AI agents (and humans) working in this repository. Read this file before writing code. The README describes the product; **this file defines the exact semantics** the implementation must satisfy.
+
+## 1. Non-negotiable invariants
+
+1. **Sum-zero.** For every group at any moment, `Σ balance(user, group) = 0` exactly (to the cent/kopeck).
+2. **Whole amount.** For every expense, `Σ share(participant) = expense.amount` exactly. No fractional unit is ever lost or created.
+3. **Decimal only.** All monetary values are `Decimal` in Python, `NUMERIC` in SQL. Floats are forbidden in money paths (schema, API, split math, frontend display layer uses integer minor units or strings).
+4. **Compute on read.** Balances are never stored in mutable columns; they are SQL aggregates over expenses and confirmed settlements. Anything that changes an expense or settlement is automatically reflected in balances.
+5. **Server-side split.** Clients send the split *method* and *inputs* (method, participants, weights or exact amounts); the server computes the exact participant shares and is the only writer of them.
+6. **Single source of truth per tab.** Every browser tab of the same user receives the same WebSocket events and the same REST responses; no tab-local server state exists.
+
+## 2. Exact semantics
+
+### 2.1 Splitting an expense amount `A` among `n` participants
+
+Money is expressed in minor units (cents/kopecks). Currency precision comes from a small backend map (default 2; 0 for JPY, KRW, VND; 3 for KWD, BHD, OMR, TND). `floor` and remainder always operate in minor units.
+
+**Equal split.**
+1. `base = floor(A / n)`, `r = A − n·base` (so `0 ≤ r < n` minor units).
+2. Every participant gets `base`.
+3. The `r` leftover units are assigned **one per participant** to the `r` earliest-joined participants.
+   - Ordering (stable, deterministic): `membership.joined_at` ascending, tie-break `user_id` ascending. The payer is in the rotation like anyone else.
+4. Example: `100.00` among 3 → `33.33 × 3 = 99.99`, `r = 1` → shares `33.34, 33.33, 33.33` in join order. Sum = `100.00`. ✓
+
+**Share-weighted split (weights `w₁…wₙ > 0`).** Largest-remainder method:
+1. `raw_i = A · w_i / Σw` (exact Decimal arithmetic, sufficient precision).
+2. `base_i = floor(raw_i)` in minor units; leftover `r = A − Σ base_i` (`0 ≤ r < n`).
+3. Sort participants by `frac(raw_i) = raw_i − base_i` **descending**; tie-break = earliest-joined order (same as 2.1).
+4. The top `r` participants in that order get `+1` minor unit each. Sum = `A`. ✓
+5. Example: `A = 10.01`, weights `[1, 1, 1]` → `raw = 3.3366…` each → bases `3.33 × 3 = 9.99`, `r = 2`, remainders equal → earliest two joiners get `+0.01` → `3.34, 3.34, 3.33`.
+
+**Exact amounts.** The client provides one amount per participant; the server **rejects** the request (422) unless `Σ amounts = A` exactly. No recomputation.
+
+Editing an expense's amount or participants: shares are recomputed by the same rules (equal: fresh floor/remainder; weighted: the stored weights are kept and re-applied to the new amount; exact: the client must re-supply amounts summing to the new total). The stored participant rows are always the authoritative exact shares.
+
+### 2.2 Balances
+
+For group `G` and member `M`:
+
+```
+balance(M, G) =
+    Σ_E∈G (paid by M on E)                        -- M as payer
+  − Σ_E∈G (M's share on E)                        -- M as participant
+  + Σ_S (confirmed S where S.from = M, S.group = G)
+  − Σ_S (confirmed S where S.to   = M, S.group = G)
+```
+
+- Only **confirmed** settlements count. Pending/rejected/cancelled never do.
+- Soft-deleted expenses are excluded from every sum.
+- Consequence: `Σ_M balance(M, G) = 0` holds by construction (each expense nets to 0; each settlement nets to 0).
+- **Cross-group view** (`GET /balances/all`): one row per (user, currency) summing the member's balances over all their groups in that currency. No currency conversion.
+
+### 2.3 Pairwise debts & the optimizer
+
+From net balances, build debtors (`balance < 0`, amount `= −balance`) and creditors (`balance > 0`). Suggested transfers:
+
+```
+sort debtors by amount desc, creditors by amount desc   (tie-break user_id asc)
+i = j = 0
+while i < |D| and j < |C|:
+    amt = min(D[i].amount, C[j].amount)
+    emit (D[i].user, C[j].user, amt)
+    D[i].amount -= amt;  C[j].amount -= amt
+    if D[i].amount == 0: i += 1
+    if C[j].amount == 0: j += 1
+```
+
+This yields at most `n−1` transfers whose total equals the total debt. The result is advisory (UI suggestion); actual settlement is only via the settlement flow (2.4).
+
+### 2.4 Settlement lifecycle
+
+States: `pending → confirmed | rejected | cancelled` (all three terminal).
+
+| Transition | Who | Effect |
+|---|---|---|
+| create `pending` | debtor (any member who owes the recipient in the current pairwise view) | Validated at proposal: `amount > 0` and `amount ≤ pairwise_debt(from → to)` (else 422). No balance effect. Both parties see it as *pending* (in-app + WebSocket). |
+| `→ confirmed` | recipient only | The amount is applied to balances (from +, to −). Both parties notified. |
+| `→ rejected` | recipient only | Terminal. Sender notified. |
+| `→ cancelled` | sender only | Terminal. Recipient notified. |
+
+Note: balances move only on confirmation, and they are computed on read, so if the debt shrinks between proposal and confirmation (someone else settled, an expense was edited/deleted), the confirmed payment is still applied in full and may create a **reverse debt** — that is correct: the money really moved.
+
+### 2.5 Editing / deleting expenses
+
+- Edit: payer, amount, date, category, comment, participants, split — any of these (creator or group owner only). Recompute shares per 2.1, write, emit `expense.updated`, push fresh balance snapshot.
+- Delete: **soft delete** (`deleted_at`). Excluded from all sums. Emits `expense.deleted`. Feed keeps the row ("Alice deleted an expense").
+- No recalculation job is needed: because of invariant 4, the next read is already correct, and the pushed snapshot makes it immediate for connected tabs.
+
+### 2.6 Notifications (in-app)
+
+`Notification` row (per user) + WebSocket push. Triggers:
+
+| Event | Notified users |
+|---|---|
+| Expense created | payer ∪ all participants (dedup) |
+| Expense updated | same set, computed from the updated expense |
+| Settlement proposed | sender + recipient |
+| Settlement confirmed / rejected / cancelled | sender + recipient |
+| Member joined / left | all members **except the actor** (a user is never notified about their own join/leave) |
+| Group closed / reopened | all members |
+
+Notifications are read via the bell; mark-read is explicit (`POST /notifications/read`).
+
+### 2.7 Overdue debts & reminder emails
+
+Definitions (all per group `G`, member `M`):
+
+- **Owed expense**: an active (non-deleted) expense `E` in `G` where `M` is a participant and `share(M, E) > paid(M, E)`. Its debt portion is `share − paid`.
+- **FIFO attribution**: confirmed settlements sent by `M` in `G` are applied to `M`'s owed expenses in ascending `(E.date, E.id)` order, covering the oldest first. (This is a bookkeeping attribution for aging only; it does not change balances, which are pure aggregates.)
+- `M`'s **debt age** = the date of the oldest owed expense of `M` in `G` that is not fully covered by FIFO attribution.
+- `M` is **overdue** in `G` ⇔ `balance(M, G) < 0` **and** `now − debt_age > DEBT_OVERDUE_DAYS` (default 7).
+
+Scheduler (APScheduler, hourly):
+1. Find all (M, G) overdue.
+2. Skip if `REMINDER_INTERVAL_DAYS` (default 7) have not passed since `last_reminder_sent_at(M, G)` (table `debt_reminder(group_id, debtor_id, last_sent_at)`, unique per pair).
+3. **Re-verify at send time** (fresh transaction): if `balance(M, G) ≥ 0` or no longer overdue → skip. Never remind about a settled debt.
+4. Send one email to `M` listing, per creditor, the current pairwise amounts (from 2.3), the total, and the group name. Amounts are rendered with the currency code (`12.50 USD`) and the email links to the group page (`FRONTEND_URL/groups/{id}`). Mark `last_reminder_sent_at = now`.
+
+Reminders apply to **closed groups too** until settled (the close summary is not a settlement).
+
+### 2.8 Concurrent writes
+
+- Two members adding expenses simultaneously: two independent transactions; both commit (no shared mutable row). Balances are aggregates, so the sum-zero invariant and the "both recorded" requirement hold without locking.
+- Optimistic locking is not needed for expenses. The only contended writes are settlement state transitions (single row, guarded by `WHERE state = 'pending'` → 409 if someone else acted first) and group status transitions.
+
+### 2.9 Group close / reopen
+
+- `POST /groups/{id}/close` — **owner only** (`group.created_by`). Sets `status = closed`, `closed_at`. Sends one **final summary email** per member, addressed to that member by name: per-member balance (**all members, zero-balance ones included** — it is a complete statement, not just the outstanding debts), who-owes-whom pairs, suggested transfers (2.3), or "everyone is settled up" if all zero. Amounts are rendered with the currency code (`12.50 USD`) and the email links to the group page (`FRONTEND_URL/groups/{id}`). Emits `group.closed`.
+- While closed: `POST /groups/{id}/expenses` and expense receipt upload → **409**. Everything else (settlements, invites, leaving, read endpoints) still works.
+- `POST /groups/{id}/reopen` — owner only. `status = active`, `closed_at = null`. Emits `group.reopened`. No email.
+
+### 2.10 Invitations
+
+- `Invitation`: `group_id`, `token` (URL-safe, unique, 128-bit), `kind` (`link` | `email`), `email_to` (email kind only), `created_by`, `expires_at = now + INVITE_EXPIRY_DAYS` (default 7), `status` (`active/used/revoked`), `used_by`, `used_at`.
+- **Link invites**: reusable until revoked or expired (`status` stays `active` for everyone's benefit). Any authenticated user who opens `FRONTEND_URL/invite/{token}` joins the group; `used_by`/`used_at` record the most recent joiner for display only. A user already in the group gets 409 "already a member".
+- **Email invites**: same token mechanism, single-use for the addressed email. The email contains the invite link. If the recipient has no account, the frontend offers registration; after registering **with that exact email**, accepting the token joins the group (token remains bound to that email).
+- Accept endpoint: `POST /invites/accept {token}` → validates (exists, active, not expired, [email matches if email kind], user not already member) → inserts `Membership(joined_at = now)` → emits `member.joined` to all members.
+- Revoking an active invite deletes/invalidates it; already-joined members are unaffected.
+
+### 2.11 Auth & multi-tab behavior
+
+- Registration: `email` (unique, case-insensitive), `password` (min 8 chars), `display_name` (defaults to local part of email, editable).
+- Login → `access_token` (JWT, 15 min, `sub = user_id`) + `refresh_token` (JWT, 7 days, `jti` persisted in `refresh_tokens` table).
+- Refresh rotates: old `jti` revoked, new pair issued. Logout revokes the presented `jti`.
+- Multi-tab: the same access token is valid in every tab (stateless). Each tab opens its own WebSocket authenticated by the access token (validated once at handshake; socket dropped if the token expires mid-session — client re-authenticates with a fresh token). Because every event is broadcast to all sockets of the user, and every REST response is computed on read, **tabs never diverge** — this is requirement 7.
+
+### 2.12 Currency handling
+
+- Each group has exactly one `currency` (ISO 4217 code, set at creation, immutable — enforced by schema).
+- Precision map (minor digits): default 2; 0 → JPY, KRW, VND; 3 → KWD, BHD, OMR, TND. Applied to: rounding in splits, serialization (always send money as **strings** in the API, e.g. `"33.34"`), and frontend formatting.
+- Serialized strings always carry **exactly `minor_digits` decimals**: `JPY 0 → "0"`, `USD 0 → "0.00"`, `KWD 1.5 → "1.500"`. A zero with no decimal part in a zero-digit currency is correct, not a bug.
+- No conversion between currencies anywhere, including the cross-group view.
+
+## 3. Architecture & conventions
+
+### 3.1 Backend layout
+
+```
+app/
+  main.py            # create_app(), lifespan (scheduler start), mount WS
+  core/config.py     # pydantic-settings Settings (all env vars)
+  core/security.py   # argon2 hash/verify, JWT create/decode, deps (get_current_user)
+  core/deps.py       # get_db, get_current_user, get_group_member, get_group_owner
+  db/session.py      # async engine/session
+  db/base.py         # Declarative base, mixins (id, created_at, updated_at)
+  models/*.py        # one module per aggregate; relationships explicit
+  schemas/*.py       # request/response Pydantic models; money fields as Decimal or str
+  api/*.py           # thin routers: parse/validate → call service → map errors
+  services/*.py      # business logic, takes a DB session; the ONLY layer that
+                     #   knows split/balance formulas
+  workers/scheduler.py  # APScheduler job: overdue scan (2.7)
+```
+
+Rules:
+- Routers never import ORM models directly beyond typing; they call services. Services never touch FastAPI request objects.
+- Every money-changing operation happens in **one transaction**: state change + feed event + notification rows + (WS push is post-commit, via a registry callback).
+- Errors: 401 unauthenticated, 403 not a member / not owner, 404 not found, 409 illegal state (e.g. expense on closed group, settlement transition race, duplicate member), 422 validation (e.g. exact split doesn't sum to total).
+- Money in JSON is always a string. `date` fields are ISO-8601. Timestamps stored UTC.
+- `JWT_SECRET` is validated at boot (`core/config.py`): empty → auto-generate in `DEBUG`, fail otherwise; a weak secret (shorter than 32 chars or a known dev default) → warn in `DEBUG`, fail otherwise. Production must set a strong secret.
+
+### 3.2 WebSocket protocol
+
+- Endpoint `WS /ws?token=<access token>`. On success the server subscribes the socket to the user's group set (and adds a group dynamically when the user joins one mid-session).
+- Server→client messages: `{"type": "<event>", "group_id": ..., "data": {...}}`. `data` always contains everything the client needs to update UI without an extra REST call.
+- Event catalogue (all push a fresh `group_balances` snapshot — per-user balance + pairwise pairs + suggested transfers — unless noted):
+
+| Type | data highlights |
+|---|---|
+| `expense.created` / `expense.updated` | full expense incl. exact participant shares |
+| `expense.deleted` | expense id, description (for the feed) |
+| `settlement.created` / `settlement.confirmed` / `settlement.rejected` / `settlement.cancelled` | full settlement |
+| `member.joined` / `member.left` | member user |
+| `group.closed` / `group.reopened` | group |
+| `notification.created` | the notification (bell count) |
+
+- Client→server: only pings. No client commands (all mutations are REST).
+- Reconnect policy (frontend): exponential backoff; on reconnect the client refetches its data (REST) before trusting state.
+- The frontend plays a short notification sound (`/alert.mp3`, via `lib/sound.ts`) on every `notification.created` event.
+
+### 3.3 Activity feed
+
+Append-only `ActivityEvent` rows (group, type, actor, ref, payload JSONB, created_at) written in the same transaction as the action. `GET /groups/{id}/activity` — cursor pagination (`created_at, id` descending), default 30/page. Feed event types mirror the WS catalogue plus `group.created`, `member.left`/close/reopen. Soft-deleted expenses still render ("deleted an expense").
+
+### 3.4 Mail
+
+- Transport: `aiosmtplib` when `SMTP_HOST` set; otherwise log-only (dev). Templates are plain text + HTML, one per purpose: invite, overdue reminder, group-close summary.
+- HTML bodies are a shared **branded envelope** matching the frontend look: gray-50 page, 600px-wide white card, a header with the app icon (inlined as a base64 data URI) and the two-tone **EasyMoney** wordmark (indigo `#4f46e5` accent), table-based money rows (label left, right-aligned tabular amount), and an indigo CTA button for the action link. Group-scoped mails (reminder, close summary) link to the group page `FRONTEND_URL/groups/{id}`; the invite links to its token URL.
+- Every mail path goes through `services/mail.py`; nothing else opens SMTP connections.
+
+### 3.5 Files (receipts)
+
+- `POST /expenses/{eid}/receipt` (multipart, field `file`): validates size ≤ `MAX_UPLOAD_MB`, content-type image/* or application/pdf, stores as `<uuid>.<ext>` under `UPLOAD_DIR`, writes `Attachment` row linked to the expense. Replaces any existing receipt (old file removed).
+- `DELETE /expenses/{eid}/receipt`: removes the existing receipt — the `Attachment` row and the file under `UPLOAD_DIR`. 404 when the expense has no receipt. Unlike the upload it is allowed while the group is closed (only the upload is blocked, §2.9). No balance effect, no WS event (the client refetches, same as the upload).
+- `GET /attachments/{id}`: group-members-only, streams with correct content-type + `Content-Disposition`.
+
+### 3.6 Frontend layout
+
+```
+src/
+  api/client.ts      # fetch wrapper: attaches token, refresh-once on 401, typed
+  api/endpoints.ts   # one function per endpoint (typed with the OpenAPI types)
+  ws/socket.ts       # WS client: connect/reconnect, token refresh, event bus (emits typed events)
+  query/queries.ts   # TanStack Query hooks; WS bus invalidates/mutates matching keys
+  pages/Auth.tsx, Groups.tsx, Group.tsx, Overview.tsx
+  components/…       # ExpenseForm (split editor UI), Balances, Settlements, Feed,
+                     #   InvitePanel, NotificationsBell, ReceiptUpload
+```
+
+Rules:
+- The WS bus is the only writer to the query cache for group data; REST remains the source for initial loads and refreshes. Both converge because the server is the single source of truth.
+- Money is rendered from API strings via a `formatMoney(value, currency)` helper (locale-aware, correct minor digits per the precision map). Never parse to float for display arithmetic.
+- Every group screen must react to the WS events listed in 3.2 (expense/settlement/balance changes appear without reload — this is how "updated immediately for all group members" is demonstrated).
+- Multi-tab: no `BroadcastChannel` or tab-to-tab hacks; the server-side per-user fan-out already covers it.
+- Receipts are **never inlined in the expense list**. The list shows icon+text buttons ("View receipt" / "Replace" / "Attach receipt"); "View" opens a modal (image or PDF), and in edit mode the current receipt is shown as a preview with an "Open full size" modal.
+
+### 3.7 Database
+
+- PostgreSQL 16. Alembic for every schema change (no manual DDL). Money columns `NUMERIC(14,3)`; ids `BIGSERIAL`; money-bearing queries use `NUMERIC` arithmetic only.
+- Indexes: `expenses(group_id, date)`, `expenses.payer`, `expense_participants(expense_id, user_id)`, `settlements(group_id, state)`, `activity(group_id, created_at desc)`, `notifications(user_id, read_at)`, `memberships(group_id, user_id)` unique.
+- `Membership.joined_at` is the tie-broken sort key for the split remainder (2.1) — it must be stable; set it in the DB (`now()`), never client-supplied.
+
+## 4. Environment & running
+
+See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `DEBUG`, `DEBT_OVERDUE_DAYS`, `REMINDER_INTERVAL_DAYS`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `UPLOAD_DIR`, `CORS_ORIGINS`.
+
+Local dev without Docker (optional): `alembic upgrade head`, `uvicorn app.main:app --reload`, `npm run dev` (Vite proxies `/api`, `/ws` to `:8000`).
+
+## 5. Testing requirements (definition of done)
+
+A change is done when:
+
+1. **Invariant tests pass.** `backend/tests/` must contain and keep green:
+   - `test_splits.py`: random property tests — for random A, n, weights: `Σ shares == A`, shares differ by at most 1 minor unit (equal split), remainder goes to the earliest joiners (deterministic order check).
+   - `test_balances.py`: for any sequence of expenses/settlements/edits/deletes (randomized), `Σ balances == 0` and per-user balance matches the formula 2.2 recomputed independently.
+   - `test_optimizer.py`: suggested transfers settle all debts, count ≤ n−1, each transfer respects current pairwise debts.
+   - `test_settlements.py`: state machine transitions, who-can-do-what, 409 on race (two confirms → one wins), pending has no balance effect, confirmed does.
+   - `test_reminders.py`: FIFO aging, weekly cap, skip-when-settled, closed-group behavior (use a fake clock + fake mailer).
+   - `test_ws_multiuser.py`: two sockets of the same user both receive an event; a member of another group does not.
+   - `test_concurrency.py`: two expenses created "simultaneously" (parallel tasks, no shared state) → both present, sum of balances still 0.
+2. Every migration is reversible (`alembic downgrade -1` works).
+3. `docker compose up --build` from a clean checkout works without manual steps (migrations auto-run, app on :8081).
+4. New WS event types require: backend emit + event-catalogue entry here + frontend handler.
+5. No money path uses floats (CI: `ruff` rule + grep guard in tests).
+
+## 6. Requirements traceability
+
+| # | Requirement | Where it is specified / implemented |
+|---|---|---|
+| 1 | Separate backend and frontend | `backend/`, `frontend/` services (README §Architecture) |
+| 2 | Python backend | FastAPI, Python 3.12 (§3.1) |
+| 3 | React frontend | React 18 + TS + Vite (§3.6) |
+| 4 | PostgreSQL storage | `postgres:16`, SQLAlchemy async, Alembic (§3.7) |
+| 5 | Working account system | §2.11 (register/login/refresh/revocation) |
+| 6 | Easy launch & deployment | `docker compose up --build`, auto migrations, .env defaults (README §Quick start) |
+| 7 | Two+ tabs of the same user work | §2.11, §3.2 (per-user WS fan-out, stateless REST, on-read compute) |
+| 8 | Groups with members, invites by link or email, own currency | §2.9–2.10, §2.12 |
+| 9 | Expenses: payer, amount, equal/shares/exact split, category, date, comment, receipt | §2.1, §3.5 |
+| 10 | Balances: within a group and across all groups | §2.2 (`/groups/{id}/balances`, `/balances/all`) |
+| 11 | Settlements: full/partial, pending until recipient confirms | §2.4 |
+| 12 | Group activity feed | §3.3 |
+| 13 | Reminders for outstanding debts; close with final summary report | §2.7, §2.9 |
+| 14 | Balances recalculated after every expense, immediately for all members | §2.2 + §3.2 (push fresh snapshot on every event) |
+| 15 | Optimal settlement suggestion (not pairwise all-to-all) | §2.3 (greedy, ≤ n−1 transfers) |
+| 16 | Notification when an expense involving a user is added/edited | §2.6 |
+| 17 | Splits without losing fractional units; defined extra-unit rule | §2.1 (equal: earliest joiners; weighted: largest remainder) |
+| 18 | Edit/delete expense → correct recalculation incl. processed settlements | §2.5 + invariant 4 (settlements are real money movements, recomputed on read) |
+| 19 | Settlement pending until confirmed; visible to both parties | §2.4 |
+| 20 | Overdue debt email; ≤ once/week; not sent if settled | §2.7 (FIFO aging, interval table, re-verify at send) |
+| 21 | Two concurrent expense adds both recorded; group balance sum = 0 | §2.8 + invariants 1–2 |
+| 22 | Closed group: no new expenses, summary email, reopenable | §2.9 |
+| 23 | Sound on new notification | §3.2 (`/alert.mp3` via `lib/sound.ts`, played on `notification.created`) |
+
+## 7. Style
+
+- Python 3.12, `ruff` (format + lint, line length 100), `mypy --strict` on `services/` and `models/`. Type hints everywhere; money is `Decimal`.
+- TypeScript strict; no `any` in `api/` and `ws/`.
+- Conventional commit messages (`feat:`, `fix:`, `test:`, `docs:`, `chore:`).
+- Never edit `migrations/` history; add a new revision instead.
+- When in doubt about a rule above, this file wins over intuition. If a requirement seems missing, add it here first, then implement.

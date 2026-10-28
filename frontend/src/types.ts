@@ -1,0 +1,216 @@
+/**
+ * API types, mirroring the backend OpenAPI schemas (backend/app/schemas/*).
+ * Money is always a string on the wire (AGENTS.md §2.12).
+ */
+
+// --- Auth (§2.11) ---------------------------------------------------------
+
+export interface TokenResponse {
+  access_token: string
+  refresh_token: string
+  token_type: string
+}
+
+export interface RegisterRequest {
+  email: string
+  password: string
+  display_name?: string
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+// --- Users ------------------------------------------------------------------
+
+export interface UserOut {
+  id: number
+  email: string
+  display_name: string
+  created_at: string
+}
+
+// --- Groups (§2.9, §2.12) ----------------------------------------------------
+
+export interface GroupOut {
+  id: number
+  name: string
+  currency: string
+  status: 'active' | 'closed'
+  created_by: number
+  closed_at: string | null
+  member_count: number
+  /** The caller's balance in this group, pre-formatted (string). */
+  balance: string
+}
+
+export interface MemberOut {
+  id: number
+  display_name: string
+  email: string
+  joined_at: string
+  is_owner: boolean
+}
+
+// --- Expenses (§2.1, §2.5, §3.5) ----------------------------------------------
+
+export type SplitMethod = 'equal' | 'weighted' | 'exact'
+
+export interface ParticipantIn {
+  user_id: number
+  /** Weight for weighted splits (> 0). */
+  weight?: string | null
+  /** Exact share for exact splits. */
+  amount?: string | null
+}
+
+export interface ExpenseCreateBody {
+  payer_id: number
+  description: string
+  amount: string
+  split_method: SplitMethod
+  category: string
+  /** ISO date, YYYY-MM-DD. */
+  date: string
+  comment?: string | null
+  participants: ParticipantIn[]
+}
+
+export type ExpenseUpdateBody = Partial<ExpenseCreateBody>
+
+export interface ParticipantOut {
+  user_id: number
+  display_name: string
+  share: string
+  weight: string | null
+}
+
+export interface AttachmentOut {
+  id: number
+  filename: string
+  content_type: string
+  size: number
+}
+
+export interface ExpenseOut {
+  id: number
+  group_id: number
+  payer_id: number
+  payer: string
+  created_by: number
+  description: string
+  comment: string | null
+  amount: string
+  split_method: SplitMethod
+  category: string
+  date: string
+  deleted_at: string | null
+  participants: ParticipantOut[]
+  attachment: AttachmentOut | null
+  created_at: string
+}
+
+// --- Balances (§2.2, §2.3) ----------------------------------------------------
+
+export interface MemberBalanceOut {
+  user_id: number
+  display_name: string
+  balance: string
+}
+
+export interface TransferOut {
+  from_user_id: number
+  to_user_id: number
+  amount: string
+}
+
+export interface GroupBalancesOut {
+  currency: string
+  balances: MemberBalanceOut[]
+  /** Current pairwise view: every debtor -> creditor amount (§2.4). */
+  pairs: TransferOut[]
+  /** Greedy suggestion: at most n-1 transfers (§2.3). */
+  transfers: TransferOut[]
+}
+
+export interface CurrencyBalanceOut {
+  currency: string
+  balance: string
+}
+
+// --- Settlements (§2.4) ---------------------------------------------------------
+
+export type SettlementState = 'pending' | 'confirmed' | 'rejected' | 'cancelled'
+
+export interface SettlementOut {
+  id: number
+  group_id: number
+  from_user_id: number
+  from_name: string
+  to_user_id: number
+  to_name: string
+  amount: string
+  state: SettlementState
+  confirmed_at: string | null
+  created_at: string
+}
+
+// --- Invitations (§2.10) ---------------------------------------------------------
+
+export interface InviteOut {
+  id: number
+  kind: 'link' | 'email'
+  token: string
+  url: string
+  email_to: string | null
+  created_by: number
+  expires_at: string
+  status: 'active' | 'used' | 'revoked'
+  used_by: number | null
+  used_at: string | null
+}
+
+// --- Notifications (§2.6) --------------------------------------------------------
+
+export interface NotificationOut {
+  id: number
+  type: string
+  payload: Record<string, unknown> | null
+  read_at: string | null
+  created_at: string
+}
+
+export interface NotificationListOut {
+  items: NotificationOut[]
+  unread_count: number
+}
+
+// --- Activity feed (§3.3) ---------------------------------------------------------
+
+export interface ActivityEventOut {
+  id: number
+  type: string
+  actor_id: number | null
+  actor_name: string | null
+  ref_type: string | null
+  ref_id: number | null
+  payload: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface ActivityPageOut {
+  items: ActivityEventOut[]
+  next_cursor: string | null
+}
+
+// --- WebSocket (§3.2) ---------------------------------------------------------------
+
+export interface WSMessage {
+  type: string
+  group_id: number | null
+  data: Record<string, unknown> & {
+    /** Present on every group event: the fresh balance snapshot. */
+    group_balances?: GroupBalancesOut
+  }
+}
