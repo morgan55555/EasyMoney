@@ -105,7 +105,7 @@ def create_app() -> FastAPI:
     expose_docs = settings.expose_api_docs
     app = FastAPI(
         title="EasyMoney",
-        version="0.1.0",
+        version="0.01",
         lifespan=lifespan,
         docs_url="/api/docs" if expose_docs else None,
         redoc_url="/api/redoc" if expose_docs else None,
