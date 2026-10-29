@@ -60,6 +60,62 @@ describe('previewSplit — equal', () => {
   })
 })
 
+describe('previewSplit — UI parity with the server rule (AGENTS.md §2.1)', () => {
+  it('zero-digit currency (JPY) still assigns the remainder to the earliest joiner', () => {
+    // 100 JPY / 3 → base 33, r = 1 → the first participant gets 34.
+    const res = previewSplit({
+      amount: '100',
+      currency: 'JPY',
+      method: 'equal',
+      participants: [
+        { user_id: 1 },
+        { user_id: 2 },
+        { user_id: 3 },
+      ],
+    })
+    if (!Array.isArray(res)) throw new Error('expected rows')
+    expect(res.map((r) => r.share)).toEqual(['34', '33', '33'])
+    // Zero-digit currency: no decimal point in any share, sum exact.
+    for (const row of res) expect(row.share).not.toContain('.')
+    expect(sumMinor(res, 'JPY')).toBe(100)
+  })
+
+  it('the remainder follows join order, not user_id order (equal split)', () => {
+    // The list order IS the join order. Here the earliest joiner has the HIGHER
+    // id, so an id-ordered rule would put the extra unit on user 1 — wrong.
+    const res = previewSplit({
+      amount: '10.01',
+      currency: 'EUR',
+      method: 'equal',
+      participants: [
+        { user_id: 3 }, // joined first
+        { user_id: 1 }, // joined second
+      ],
+    })
+    if (!Array.isArray(res)) throw new Error('expected rows')
+    expect(res.map((r) => r.share)).toEqual(['5.01', '5.00'])
+    expect(sumMinor(res, 'EUR')).toBe(1001)
+  })
+
+  it('weighted tie-break goes to the earliest joiner (list order), not the lowest id', () => {
+    // Equal weights → equal fractional parts → tie. The two earliest joiners
+    // (first two in the list) get the +1 unit even though their ids are higher.
+    const res = previewSplit({
+      amount: '10.01',
+      currency: 'EUR',
+      method: 'weighted',
+      participants: [
+        { user_id: 9, weight: '1' }, // joined first
+        { user_id: 2, weight: '1' }, // joined second
+        { user_id: 4, weight: '1' }, // joined third
+      ],
+    })
+    if (!Array.isArray(res)) throw new Error('expected rows')
+    expect(res.map((r) => r.share)).toEqual(['3.34', '3.34', '3.33'])
+    expect(sumMinor(res, 'EUR')).toBe(1001)
+  })
+})
+
 describe('previewSplit — weighted (largest remainder)', () => {
   it('matches the AGENTS.md example: 10.01 with weights [1,1,1]', () => {
     const res = previewSplit({

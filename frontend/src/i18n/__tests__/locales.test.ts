@@ -43,6 +43,41 @@ describe('i18n dictionaries', () => {
       expect(value.trim().length, `key ${key} is empty`).toBeGreaterThan(0)
     }
   })
+
+  it('the account/settings/confirm/revert strings exist, are non-trivial and actually translated', () => {
+    const required = [
+      // Settings modal (email + password flows, §2.13).
+      'settings.emailChange',
+      'settings.emailChanged',
+      'settings.emailConfirmSent',
+      'settings.passwordChange',
+      'settings.passwordChanged',
+      'settings.passwordConfirmSent',
+      // Verify gate.
+      'verify.title',
+      'verify.text',
+      'verify.resend',
+      // Confirmation link page.
+      'confirm.title',
+      'confirm.success',
+      'confirm.successText',
+      'confirm.failure',
+      'confirm.failureText',
+      // "This wasn't me" revert page.
+      'revert.title',
+      'revert.success',
+      'revert.successText',
+      'revert.failure',
+      'revert.failureText',
+    ]
+    for (const key of required) {
+      const e = (en as Record<string, string>)[key]
+      const u = (ru as Record<string, string>)[key]
+      expect(e?.trim().length, `EN ${key} missing`).toBeGreaterThan(3)
+      expect(u?.trim().length, `RU ${key} missing`).toBeGreaterThan(3)
+      expect(u, `RU ${key} is a copy of EN, not a translation`).not.toBe(e)
+    }
+  })
 })
 
 function enKeysContaining(prefix: string): number {
