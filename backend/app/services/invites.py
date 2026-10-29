@@ -38,11 +38,36 @@ async def create_invite(
     if kind == "email" and (not email_to or "@" not in email_to):
         raise ValidationFailed("An email address is required for email invites")
     settings = get_settings()
+    target = email_to.strip().lower() if email_to else None
+    invited: User | None = None
+    if kind == "email" and target:
+        invited = await db.scalar(select(User).where(User.email == target))
+        if invited is not None:
+            # Refuse to re-invite an existing member: there is nothing to send.
+            already_member = await db.scalar(
+                select(Membership).where(
+                    Membership.group_id == group.id, Membership.user_id == invited.id
+                )
+            )
+            if already_member is not None:
+                raise Conflict("This user is already in this group")
+        # A pending (active) email invite for the same address has not been
+        # consumed yet — don't send a duplicate one.
+        pending = await db.scalar(
+            select(Invitation).where(
+                Invitation.group_id == group.id,
+                Invitation.kind == "email",
+                Invitation.email_to == target,
+                Invitation.status == "active",
+            )
+        )
+        if pending is not None:
+            raise Conflict("This user is already invited to this group")
     invite = Invitation(
         group_id=group.id,
         token=secrets.token_urlsafe(16),
         kind=kind,
-        email_to=email_to.strip().lower() if email_to else None,
+        email_to=target,
         created_by=actor.id,
         expires_at=datetime.now(UTC) + timedelta(days=settings.invite_expiry_days),
         status="active",
@@ -53,20 +78,18 @@ async def create_invite(
     # open the notification to join the group. The row is staged in the same
     # transaction so the invite and its notification commit together.
     notifications: list[Notification] = []
-    if kind == "email" and invite.email_to:
-        invited = await db.scalar(select(User).where(User.email == invite.email_to))
-        if invited is not None:
-            notifications = await notifications_service.notify_users(
-                db,
-                [invited.id],
-                "invited",
-                {
-                    "group_id": group.id,
-                    "group_name": group.name,
-                    "token": invite.token,
-                    "inviter_name": actor.display_name,
-                },
-            )
+    if invited is not None:
+        notifications = await notifications_service.notify_users(
+            db,
+            [invited.id],
+            "invited",
+            {
+                "group_id": group.id,
+                "group_name": group.name,
+                "token": invite.token,
+                "inviter_name": actor.display_name,
+            },
+        )
     await db.commit()
     await db.refresh(invite)
     if kind == "email" and invite.email_to:

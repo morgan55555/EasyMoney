@@ -17,7 +17,7 @@ import datetime as dt
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.core.errors import Conflict
@@ -73,6 +73,12 @@ async def _notifications(factory: async_sessionmaker) -> list[tuple[int, str]]:
                 )
             ).all()
         )
+
+
+async def _invite_count(factory: async_sessionmaker) -> int:
+    async with factory() as db:
+        count = await db.scalar(select(func.count()).select_from(Invitation))
+        return int(count or 0)
 
 
 # --- scenarios ---------------------------------------------------------------
@@ -138,7 +144,9 @@ async def _email_invite_bell_notifies_existing_user(factory: async_sessionmaker)
     assert await _notifications(factory) == [(BOB, "invited")]
     # The payload carries everything the bell needs to open the invite page.
     async with factory() as db:
-        row = (await db.execute(select(Notification).where(Notification.user_id == BOB))).scalar_one()
+        row = (
+            await db.execute(select(Notification).where(Notification.user_id == BOB))
+        ).scalar_one()
     assert row.payload["group_id"] == GROUP_ID
     assert row.payload["group_name"] == f"Group {GROUP_ID}"
     assert row.payload["inviter_name"] == "User 1"
@@ -167,6 +175,83 @@ async def _email_invite_no_bell_for_unknown_email(factory: async_sessionmaker) -
         mail_service.send_mail = original
     assert sent == ["stranger@test.local"]
     assert await _notifications(factory) == []
+
+
+async def _email_invite_rejects_existing_member(factory: async_sessionmaker) -> None:
+    """An email invite to an address that is already a member is refused with a
+    clear error — no invite row, no email, no bell (§2.10)."""
+    await _mk_users(factory, (ALICE, BOB))
+    await _mk_group(factory, GROUP_ID, ALICE, (ALICE, BOB))
+    sent: list[str] = []
+    original = mail_service.send_mail
+
+    async def recorder(to: str, subject: str, text: str, html: str | None = None) -> None:
+        sent.append(to)
+
+    mail_service.send_mail = recorder
+    try:
+        async with factory() as db:
+            group = await db.get(Group, GROUP_ID)
+            alice = await db.get(User, ALICE)
+            assert group is not None and alice is not None
+            # bob (u2@test.local) is already in the group → refuse, don't create.
+            with pytest.raises(Conflict) as excinfo:
+                await invites_service.create_invite(db, group, alice, "email", "u2@test.local")
+        assert str(excinfo.value) == "This user is already in this group"
+    finally:
+        mail_service.send_mail = original
+    assert sent == []
+    assert await _invite_count(factory) == 0
+    assert await _notifications(factory) == []
+
+
+async def _email_invite_rejects_pending_duplicate(factory: async_sessionmaker) -> None:
+    """A second email invite to an address that already has an active (pending)
+    invite is refused; revoking the pending one re-opens the invitation
+    (§2.10)."""
+    await _mk_users(factory, (ALICE,))
+    await _mk_group(factory, GROUP_ID, ALICE, (ALICE,))
+    sent: list[str] = []
+    original = mail_service.send_mail
+
+    async def recorder(to: str, subject: str, text: str, html: str | None = None) -> None:
+        sent.append(to)
+
+    mail_service.send_mail = recorder
+    try:
+        # The first invite to an unknown address succeeds (email-only, no bell).
+        async with factory() as db:
+            group = await db.get(Group, GROUP_ID)
+            alice = await db.get(User, ALICE)
+            assert group is not None and alice is not None
+            first = await invites_service.create_invite(
+                db, group, alice, "email", "stranger@test.local"
+            )
+        # A duplicate pending invite to the same address is refused.
+        async with factory() as db:
+            group = await db.get(Group, GROUP_ID)
+            alice = await db.get(User, ALICE)
+            assert group is not None and alice is not None
+            with pytest.raises(Conflict) as excinfo:
+                await invites_service.create_invite(
+                    db, group, alice, "email", "stranger@test.local"
+                )
+        assert str(excinfo.value) == "This user is already invited to this group"
+        assert await _invite_count(factory) == 1  # only the first one
+        # Revoking the pending invite re-opens the invitation.
+        async with factory() as db:
+            group = await db.get(Group, GROUP_ID)
+            alice = await db.get(User, ALICE)
+            assert group is not None and alice is not None
+            await invites_service.revoke_invite(db, group, alice, first.id)
+            second = await invites_service.create_invite(
+                db, group, alice, "email", "stranger@test.local"
+            )
+        assert second.id != first.id
+    finally:
+        mail_service.send_mail = original
+    assert sent == ["stranger@test.local", "stranger@test.local"]
+    assert await _invite_count(factory) == 2
 
 
 # --- close / reopen write-blocking (§2.9) ------------------------------------
@@ -255,6 +340,14 @@ def test_email_invite_bell_notifies_existing_user(run_db) -> None:
 
 def test_email_invite_no_bell_for_unknown_email(run_db) -> None:
     run_db(_email_invite_no_bell_for_unknown_email)
+
+
+def test_email_invite_rejects_existing_member(run_db) -> None:
+    run_db(_email_invite_rejects_existing_member)
+
+
+def test_email_invite_rejects_pending_duplicate(run_db) -> None:
+    run_db(_email_invite_rejects_pending_duplicate)
 
 
 def test_close_blocks_writes_and_reopen_restores(run_db) -> None:
