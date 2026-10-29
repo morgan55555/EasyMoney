@@ -9,3 +9,27 @@ html {
 html.dark {
   background-color: #030712;
 }
+
+/* Busy buttons: 45° stripes moving across the button background. The stripes
+   are a positioned pseudo-element with pointer-events: none, so the button's
+   size never changes and its label stays visible underneath. currentColor +
+   low opacity reads on every variant (white text on indigo, dark text on
+   white, both themes). */
+@keyframes btn-stripes-move {
+  from { background-position: 0 0; }
+  /* one full 45° stripe period = 12px * sqrt(2), so the loop is seamless */
+  to { background-position: 16.97px 0; }
+}
+.btn-stripes {
+  position: relative;
+  overflow: hidden;
+}
+.btn-stripes::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.15;
+  background-image: repeating-linear-gradient(45deg, currentColor 0px, currentColor 6px, transparent 6px, transparent 12px);
+  animation: btn-stripes-move 0.8s linear infinite;
+}

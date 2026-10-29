@@ -8,9 +8,10 @@ import { createPortal } from 'react-dom'
 // --- Spinner ------------------------------------------------------------------
 
 /**
- * Icon-sized loading glyph. Sized to the button's text line (no extra
- * padding) so a busy button never changes height — the page-level `Spinner`
- * below reuses it and adds its own `py-8` for centered page loading states.
+ * Icon-sized loading glyph, used by the page-level `Spinner` below (which
+ * adds its own `py-8` for centered page loading states). Busy buttons no
+ * longer show a spinner — they keep their label and animate moving 45°
+ * stripes instead (`.btn-stripes` in index.css).
  */
 export function SpinnerIcon() {
   return (
@@ -66,11 +67,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export function Button({ variant = 'primary', busy = false, disabled, className = '', children, ...rest }: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${buttonStyles[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${buttonStyles[variant]} ${busy ? 'btn-stripes' : ''} ${className}`}
       disabled={disabled || busy}
+      aria-busy={busy}
       {...rest}
     >
-      {busy ? <SpinnerIcon /> : null}
       {children}
     </button>
   )
@@ -223,10 +224,11 @@ export function IconButton({
       title={title}
       aria-label={title}
       disabled={disabled || busy}
-      className={`inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${iconButtonStyles[variant]} ${className}`}
+      className={`inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${iconButtonStyles[variant]} ${busy ? 'btn-stripes' : ''} ${className}`}
+      aria-busy={busy}
       {...rest}
     >
-      {busy ? <SpinnerIcon /> : children}
+      {children}
     </button>
   )
 }
