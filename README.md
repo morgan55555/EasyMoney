@@ -83,7 +83,7 @@ A client–server web application for managing shared expenses — for a trip, a
 | Real-time | WebSocket (native FastAPI), per-user connection fan-out |
 | Background jobs | APScheduler (AsyncIOScheduler) — hourly reminder scan |
 | Mail | aiosmtplib; SMTP via env vars, log-only in dev |
-| Files | Local disk under a Docker volume (`/data/uploads`), size-limited |
+| Files | S3-compatible object store (LocalStack in compose); optional local-disk backend |
 | Frontend | React 18 + TypeScript + Vite |
 | Frontend data | TanStack Query (REST) + WebSocket event bus that invalidates/updates the cache |
 | Frontend styling | Tailwind CSS |
@@ -138,7 +138,32 @@ Copy the values from the table below into `.env` (a `.env.example` will ship wit
 | `INVITE_EXPIRY_DAYS` | `7` | Lifetime of an invitation |
 | `MAX_UPLOAD_MB` | `10` | Receipt file size limit |
 | `CORS_ORIGINS` | `http://localhost:8081` | Allowed origins (only relevant if frontend not behind the same nginx) |
-| `UPLOAD_DIR` | `/data/uploads` | Where receipt files are stored (Docker volume) |
+| `STORAGE_BACKEND` | `s3` (compose) / `local` (app default) | Where receipt files live: `s3` (an S3-compatible store — LocalStack in compose, AWS S3 in production) or `local` (plain disk under `UPLOAD_DIR`) |
+| `S3_ENDPOINT_URL` | `http://localstack:4566` (compose) | The S3-compatible endpoint. Leave empty for real AWS to let boto3 use the provider default |
+| `S3_BUCKET` | `easymoney-receipts` | The S3 bucket that stores receipts (created at boot, idempotently) |
+| `S3_REGION` | `us-east-1` | The S3 region (drives the `LocationConstraint` when the bucket is created) |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | `test` / `test` (compose) | Dummy credentials for LocalStack. Leave both empty for real AWS to let boto3 resolve them from the environment (`AWS_*`) / IAM |
+| `UPLOAD_DIR` | `/data/uploads` | Where receipt files are stored — only used when `STORAGE_BACKEND=local` |
+
+### Object storage (receipts)
+
+Receipt files live in an **S3-compatible object store** (the `app.services.storage`
+abstraction) — never on a mounted volume. The compose stack runs a LocalStack service
+and stores receipts in the `easymoney-receipts` bucket; the bucket is created
+automatically at boot, so `docker compose up --build` just works.
+
+- **Compose (default):** `STORAGE_BACKEND=s3` pointed at the `localstack` service
+  (`http://localstack:4566`). LocalStack is ephemeral (no volume), so receipts live for
+  the container's lifetime — fine for dev.
+- **Real AWS S3:** set `STORAGE_BACKEND=s3` plus real `S3_ENDPOINT_URL`/`S3_BUCKET`/
+  `S3_REGION`, and either real `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` or leave both
+  empty to let boto3 resolve credentials from the environment or an IAM/instance role.
+- **Plain disk:** set `STORAGE_BACKEND=local` and `UPLOAD_DIR` (the pre-S3 behaviour;
+  also the default for bare `uvicorn` dev and the pytest suite).
+
+> Moving an existing deployment: this changes where *new* receipts go. A clean checkout
+> has no pre-existing on-disk corpus to migrate; if a deployment already has receipts on
+> the old `uploads` volume, copy them into the bucket once (out of scope here).
 
 ### API docs (Swagger / ReDoc)
 
@@ -293,5 +318,4 @@ This project is licensed under the [GNU General Public License v3.0](LICENSE) (G
 
 - Multi-currency group and automatic currency conversion (groups are single-currency by design; cross-group totals are per-currency).
 - Horizontal backend scaling behind a load balancer (needs a WS pub/sub broker, e.g. Redis).
-- Object storage (S3-compatible) for receipts — v1 uses a Docker volume.
 - Mobile app.

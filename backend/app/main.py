@@ -40,6 +40,7 @@ from app.core.errors import (
     ValidationFailed,
 )
 from app.db.session import dispose_engine
+from app.services import storage as storage_service
 from app.workers import scheduler as scheduler_worker
 from app.ws import endpoint as ws_api
 from app.ws import hook as ws_hook
@@ -90,8 +91,10 @@ class _TokenRedactFilter(logging.Filter):
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # B8: the in-process WebSocket registry; services reach it through the
     # post-commit hook (app.ws.hook). B9: the APScheduler runs the hourly
-    # overdue-debt reminder scan (app.workers.scheduler, §2.7).
+    # overdue-debt reminder scan (app.workers.scheduler, §2.7). Storage
+    # backend is made ready (S3: the bucket is created, idempotently).
     ws_hook.set_manager(ConnectionManager())
+    await storage_service.get_store().ready()
     scheduler = scheduler_worker.start_scheduler()
     try:
         yield

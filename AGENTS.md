@@ -250,9 +250,19 @@ Append-only `ActivityEvent` rows (group, type, actor, ref, payload JSONB, create
 
 ### 3.5 Files (receipts)
 
-- `POST /expenses/{eid}/receipt` (multipart, field `file`): validates size ≤ `MAX_UPLOAD_MB`, content-type image/* or application/pdf, stores as `<uuid>.<ext>` under `UPLOAD_DIR`, writes `Attachment` row linked to the expense. Replaces any existing receipt (old file removed). Only the expense creator or the group owner (same rule as §2.5; 403 otherwise). Emits `expense.receipt.updated` with the new `attachment`, so every open tab of every member sees the receipt without a reload.
-- `DELETE /expenses/{eid}/receipt`: removes the existing receipt — the `Attachment` row and the file under `UPLOAD_DIR`. 404 when the expense has no receipt. Unlike the upload it is allowed while the group is closed (only the upload is blocked, §2.9). Only the expense creator or the group owner (same rule as §2.5; 403 otherwise). No balance effect; emits `expense.receipt.updated` with `attachment: null`.
-- `GET /attachments/{id}`: group-members-only, streams with correct content-type + `Content-Disposition`.
+Receipt bytes live in the **object store** (`app.services.storage`), selected by
+`STORAGE_BACKEND`: `s3` (an S3-compatible store — LocalStack in compose, AWS S3 in
+production) or `local` (plain disk under `UPLOAD_DIR`, the pre-S3 behaviour and the
+default for bare dev / the test suite). The service layer (`expenses.py`) talks only to
+the store interface — it never touches a filesystem path or an SDK client (boto3 is
+synchronous and always runs via `asyncio.to_thread`). The object **key** is the
+`Attachment.filename` value (`<uuid4-hex>.<ext>`); `content_type`/`size` stay on the DB
+row (authoritative for the API). `ready()` (bucket create for S3, no-op for local) runs
+once in the app lifespan.
+
+- `POST /expenses/{eid}/receipt` (multipart, field `file`): validates size ≤ `MAX_UPLOAD_MB`, content-type image/* or application/pdf, stores the bytes under a fresh `<uuid4-hex>.<ext>` key, writes the `Attachment` row linked to the expense. Replaces any existing receipt (old key removed). Only the expense creator or the group owner (same rule as §2.5; 403 otherwise). Emits `expense.receipt.updated` with the new `attachment`, so every open tab of every member sees the receipt without a reload.
+- `DELETE /expenses/{eid}/receipt`: removes the existing receipt — the `Attachment` row and the object (the object is removed post-commit; a missing key is ignored). 404 when the expense has no receipt. Unlike the upload it is allowed while the group is closed (only the upload is blocked, §2.9). Only the expense creator or the group owner (same rule as §2.5; 403 otherwise). No balance effect; emits `expense.receipt.updated` with `attachment: null`.
+- `GET /attachments/{id}`: group-members-only, streams the object bytes with correct content-type + `Content-Disposition`; 404 when the row exists but the object is gone.
 
 ### 3.6 Frontend layout
 
@@ -280,10 +290,11 @@ Rules:
 - Indexes: `expenses(group_id, date)`, `expenses.payer`, `expense_participants(expense_id, user_id)`, `settlements(group_id, state)`, `activity(group_id, created_at desc)`, `notifications(user_id, read_at)`, `memberships(group_id, user_id)` unique, `email_tokens.token` unique, `email_tokens(user_id, purpose)`.
 - Avatars are `text` (base64, no `data:` prefix) + `avatar_content_type`; never on a money column.
 - `Membership.joined_at` is the tie-broken sort key for the split remainder (2.1) — it must be stable; set it in the DB (`now()`), never client-supplied.
+- `attachments.filename` doubles as the receipt **object-store key** (§3.5) — there is no separate key column and no `uploads` Docker volume; receipt bytes live in the object store, not in the DB.
 
 ## 4. Environment & running
 
-See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `SMTP_ENABLED`, `EMAIL_REGISTER_CONFIRMATION`, `EMAIL_CHANGE_CONFIRMATION`, `PASSWORD_CHANGE_CONFIRMATION`, `CONFIRMATION_TOKEN_HOURS`, `EMAIL_CHANGE_REVERT_DAYS`, `REGISTRATION_OPEN`, `MAX_AVATAR_MB`, `DEBUG`, `DEBT_OVERDUE_DAYS`, `REMINDER_INTERVAL_DAYS`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `UPLOAD_DIR`, `CORS_ORIGINS`.
+See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `SMTP_ENABLED`, `EMAIL_REGISTER_CONFIRMATION`, `EMAIL_CHANGE_CONFIRMATION`, `PASSWORD_CHANGE_CONFIRMATION`, `CONFIRMATION_TOKEN_HOURS`, `EMAIL_CHANGE_REVERT_DAYS`, `REGISTRATION_OPEN`, `MAX_AVATAR_MB`, `DEBUG`, `DEBT_OVERDUE_DAYS`, `REMINDER_INTERVAL_DAYS`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `STORAGE_BACKEND`, `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `UPLOAD_DIR` (only when `STORAGE_BACKEND=local`), `CORS_ORIGINS`.
 
 Local dev without Docker (optional): `alembic upgrade head`, `uvicorn app.main:app --reload`, `npm run dev` (Vite proxies `/api`, `/ws` to `:8000`).
 

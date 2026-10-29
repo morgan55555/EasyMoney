@@ -17,7 +17,8 @@ COPY alembic.ini ./
 COPY migrations ./migrations
 COPY entrypoint.sh ./
 
-# Non-root user; the uploads dir is a mounted volume.
+# Non-root user. The /data/uploads dir is kept (harmless) so the `local`
+# receipt backend still has a path if the image is run without a S3 store.
 RUN useradd -m appuser \
     && mkdir -p /data/uploads \
     && chown -R appuser:appuser /data /app

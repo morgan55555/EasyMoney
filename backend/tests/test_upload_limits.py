@@ -31,6 +31,7 @@ from app.core.config import get_settings
 from app.main import create_app
 from app.models.user import User
 from app.services import groups as groups_service
+from app.services import storage as storage_service
 
 # Must stay in sync with conftest.TEST_DATABASE_URL.
 TEST_DATABASE_URL = "postgresql+asyncpg://easymoney:easymoney@localhost:5432/easymoney_test"
@@ -57,11 +58,13 @@ def up_client() -> Iterator[tuple[TestClient, Path]]:
     os.environ["MAX_UPLOAD_MB"] = "1"
     os.environ["MAX_AVATAR_MB"] = "1"
     get_settings.cache_clear()
+    storage_service.reset_store()
     _reset_app_engine()
     app = create_app()
     with TestClient(app) as client:
         yield client, upload_dir
     _reset_app_engine()
+    storage_service.reset_store()
     for key, value in (
         ("DATABASE_URL", original_db),
         ("UPLOAD_DIR", original_uploads),

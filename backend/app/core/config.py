@@ -91,6 +91,20 @@ class Settings(BaseSettings):
 
     # --- Uploads ---
     max_upload_mb: int = 10
+    # Where receipt files live: "s3" (an S3-compatible object store; LocalStack
+    # in the compose stack) or "local" (plain disk under ``upload_dir`` — the
+    # pre-S3 behaviour, still the default for bare dev and the test suite).
+    storage_backend: str = "local"
+    # S3-compatible endpoint. Empty = the provider's default endpoint (AWS).
+    # The compose stack points this at the LocalStack service.
+    s3_endpoint_url: str = ""
+    s3_bucket: str = "easymoney-receipts"
+    s3_region: str = "us-east-1"
+    # Empty = let boto3 resolve credentials on its own (AWS_* env vars, IAM /
+    # instance roles). Set dummy values (``test``) for LocalStack.
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
+    # Only used when ``storage_backend`` is "local".
     upload_dir: str = "/data/uploads"
 
     # --- CORS ---

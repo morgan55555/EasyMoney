@@ -24,6 +24,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      localstack:
+        condition: service_healthy
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-easymoney}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-easymoney}
@@ -69,10 +71,16 @@ services:
       REMINDER_INTERVAL_DAYS: ${REMINDER_INTERVAL_DAYS:-7}
       INVITE_EXPIRY_DAYS: ${INVITE_EXPIRY_DAYS:-7}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
-      UPLOAD_DIR: ${UPLOAD_DIR:-/data/uploads}
+      # Receipt objects live in an S3-compatible store (LocalStack here; AWS
+      # S3 in production). The backend creates the bucket at boot (idempotent).
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-s3}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://localstack:4566}
+      S3_BUCKET: ${S3_BUCKET:-easymoney-receipts}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      # Dummy credentials for LocalStack; point at real AWS_* / IAM in prod.
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-test}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-test}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8081}
-    volumes:
-      - uploads:/data/uploads
     # The backend is reached via the frontend on :8081 (nginx proxies /api
     # and /ws here). To expose it directly on the host for curl/debugging,
     # add:
@@ -111,6 +119,25 @@ services:
       - "8025:8025" # web UI
       - "1025:1025" # SMTP (point SMTP_HOST=mailpit, SMTP_PORT=1025 to use it)
 
+  localstack:
+    # S3-compatible object store for receipt files (replaces the old uploads
+    # volume). Only the S3 service runs. Ephemeral by design (no volume): fine
+    # for dev; point S3_* at real AWS S3 for durable production storage.
+    # Pinned to the last Community image (4.14): the 2026 date-versioned
+    # "latest" build requires a LOCALSTACK_AUTH_TOKEN license to boot.
+    image: localstack/localstack:4.14.0
+    restart: unless-stopped
+    environment:
+      SERVICES: s3
+      AWS_DEFAULT_REGION: us-east-1
+      DEBUG: "0"
+    healthcheck:
+      # The image is python-based, so probe the health endpoint with python.
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:4566/_localstack/health',timeout=3)\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
 volumes:
   pgdata:
-  uploads:

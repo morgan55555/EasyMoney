@@ -36,6 +36,7 @@ from app.models.user import User
 from app.schemas.expenses import ExpenseCreate, ParticipantIn
 from app.services import expenses as expenses_service
 from app.services import groups as groups_service
+from app.services import storage as storage_service
 from app.ws import hook as ws_hook
 from app.ws.registry import ConnectionManager
 
@@ -63,11 +64,13 @@ def receipt_client() -> Iterator[tuple[TestClient, Path]]:
     os.environ["DATABASE_URL"] = TEST_DATABASE_URL
     os.environ["UPLOAD_DIR"] = str(upload_dir)
     get_settings.cache_clear()
+    storage_service.reset_store()
     _reset_app_engine()
     app = create_app()
     with TestClient(app) as client:
         yield client, upload_dir
     _reset_app_engine()
+    storage_service.reset_store()
     if original_db is None:
         os.environ.pop("DATABASE_URL", None)
     else:

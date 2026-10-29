@@ -12,8 +12,9 @@ Rules implemented here (the routers stay thin):
 * a closed group rejects new expenses and receipt uploads (409, §2.9);
 * deletes are soft (``deleted_at``); deleted rows stay in the feed but are
   excluded from every balance sum (invariant 4 does the rest). The receipt
-  dies with the expense: its row goes in the same transaction, the file is
-  unlinked post-commit (a missing file is ignored).
+  dies with the expense: its row goes in the same transaction, the object is
+  removed from the store (app.services.storage) post-commit (a missing object
+  is ignored).
 
 Each mutation happens in one transaction: state change + feed row +
 notification rows; the WS push goes out post-commit through ``app.ws.hook``
@@ -22,11 +23,9 @@ notification rows; the WS push goes out post-commit through ``app.ws.hook``
 
 from __future__ import annotations
 
-import contextlib
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -46,6 +45,7 @@ from app.services import currency as currency_service
 from app.services import feed as feed_service
 from app.services import notifications as notifications_service
 from app.services import splits as splits_service
+from app.services import storage as storage_service
 from app.ws import hook as ws_hook
 
 # Receipt content types accepted by POST /expenses/{id}/receipt (§3.5).
@@ -368,10 +368,11 @@ async def delete_expense(db: AsyncSession, expense: Expense, user: User) -> None
         raise NotFound("Expense not found")
     expense.deleted_at = datetime.now(UTC)
     # The receipt dies with the expense (§2.5/§3.5): the row goes in this
-    # transaction; the file is unlinked post-commit (it may already be gone).
-    receipt_filename: str | None = None
+    # transaction; the object is removed from the store post-commit (it may
+    # already be gone — the delete is idempotent).
+    receipt_key: str | None = None
     if expense.attachment is not None:
-        receipt_filename = expense.attachment.filename  # detached after the commit
+        receipt_key = expense.attachment.filename  # detached after the commit
         await db.delete(expense.attachment)
     payload = {
         "id": expense.id,
@@ -389,9 +390,8 @@ async def delete_expense(db: AsyncSession, expense: Expense, user: User) -> None
         payload=payload,
     )
     await db.commit()
-    if receipt_filename is not None:
-        with contextlib.suppress(OSError):
-            (Path(get_settings().upload_dir) / receipt_filename).unlink()
+    if receipt_key is not None:
+        await storage_service.get_store().delete(receipt_key)
     await ws_hook.emit_group(db, group, "expense.deleted", payload)
 
 
@@ -442,10 +442,9 @@ async def upload_receipt(
         raise ValidationFailed(
             "Only image/jpeg, image/png, image/gif, image/webp or application/pdf are allowed"
         )
-    directory = Path(settings.upload_dir)
-    directory.mkdir(parents=True, exist_ok=True)
     new_name = f"{uuid.uuid4().hex}.{ext}"
-    (directory / new_name).write_bytes(data)
+    # New object in before the old one is out (a failed put loses nothing).
+    await storage_service.get_store().put(new_name, data, content_type)
 
     attachment = expense.attachment
     if attachment is None:
@@ -454,14 +453,13 @@ async def upload_receipt(
         )
         db.add(attachment)
     else:
-        # Replace in place: same row (same id), old file removed from disk.
-        old_path = directory / attachment.filename
+        # Replace in place: same row (same id), old object removed from the
+        # store (delete is idempotent — it may already be gone).
+        old_name = attachment.filename
         attachment.filename = new_name
         attachment.content_type = content_type
         attachment.size = len(data)
-        # The old file may already be gone (e.g. volume wiped); the row is replaced anyway.
-        with contextlib.suppress(OSError):
-            old_path.unlink()
+        await storage_service.get_store().delete(old_name)
     await db.commit()
     await db.refresh(attachment)
     await ws_hook.emit_group(
@@ -478,16 +476,13 @@ async def delete_receipt(db: AsyncSession, expense: Expense, user: User) -> None
     filename = attachment.filename  # the object is detached after the commit
     await db.delete(attachment)
     await db.commit()
-    with contextlib.suppress(OSError):
-        (Path(get_settings().upload_dir) / filename).unlink()
+    await storage_service.get_store().delete(filename)
     await ws_hook.emit_group(
         db, expense.group, "expense.receipt.updated", _receipt_event_data(expense, None)
     )
 
 
 async def read_attachment(db: AsyncSession, attachment: Attachment) -> tuple[Attachment, bytes]:
-    """File bytes for streaming; 404 if the row exists but the file is gone."""
-    path = Path(get_settings().upload_dir) / attachment.filename
-    if not path.is_file():
-        raise NotFound("The receipt file is missing on disk")
-    return attachment, path.read_bytes()
+    """Object bytes for streaming; 404 if the row exists but the object is gone."""
+    data = await storage_service.get_store().get(attachment.filename)
+    return attachment, data
