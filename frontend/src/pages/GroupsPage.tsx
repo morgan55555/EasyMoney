@@ -62,10 +62,20 @@ export function GroupsPage() {
   const [currency, setCurrency] = useState('EUR')
   const [formError, setFormError] = useState('')
   const [query, setQuery] = useState('')
+  // "Active" (default) hides closed groups; "All" shows every group.
+  const [showClosed, setShowClosed] = useState(false)
 
   const allGroups = groups.data ?? []
-  // Filter by group name and currency code.
-  const visible = allGroups.filter((g) => matchesAny(query, g.name, g.currency))
+  // Filter by the Active/All switch, then by group name and currency code.
+  const visible = allGroups.filter(
+    (g) => (showClosed || g.status !== 'closed') && matchesAny(query, g.name, g.currency),
+  )
+  // Active mode + no query + at least one group ⇒ an empty list means every
+  // group is closed, so explain that rather than blaming the search.
+  const emptyTitle =
+    !showClosed && query.trim() === '' && allGroups.length > 0
+      ? t('groups.noActive')
+      : t('groups.noResults')
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -126,21 +136,29 @@ export function GroupsPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          <SearchInput
-            value={query}
-            onChange={setQuery}
-            placeholder={t('groups.searchPlaceholder')}
-            clearLabel={t('common.clearSearch')}
-          />
+          <div className="flex items-center gap-2">
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder={t('groups.searchPlaceholder')}
+              clearLabel={t('common.clearSearch')}
+              className="flex-1 min-w-0"
+            />
+            <GroupFilter showClosed={showClosed} onChange={setShowClosed} active={t('groups.filterActive')} all={t('groups.filterAll')} />
+          </div>
           {visible.length === 0 ? (
             <Card>
-              <EmptyState title={t('groups.noResults')} />
+              <EmptyState title={emptyTitle} />
             </Card>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {visible.map((g) => (
                 <Link key={g.id} to={`/groups/${g.id}`} className="block group">
-                  <Card className="p-4 h-full hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
+                  <Card
+                    className={`p-4 h-full hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors ${
+                      g.status === 'closed' ? 'card-stripes' : ''
+                    }`}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -183,6 +201,60 @@ export function GroupsPage() {
       )}
 
       <p className="text-xs text-gray-400 dark:text-gray-500">{t('groups.footnote')}</p>
+    </div>
+  )
+}
+
+/**
+ * Active/All switch for the groups list (sits on the search row). "Active"
+ * hides closed groups (the default); "All" shows everything. A two-option
+ * segmented control, mirroring the tab/theme buttons elsewhere in the app.
+ */
+function GroupFilter({
+  showClosed,
+  onChange,
+  active,
+  all,
+}: {
+  showClosed: boolean
+  onChange: (showClosed: boolean) => void
+  active: string
+  all: string
+}) {
+  // Both options share one fixed width so "Active"/"All" (and the longer
+  // Russian labels) always render the same size, regardless of label length.
+  const base =
+    'w-24 rounded py-1 text-center text-sm font-medium transition-colors'
+  return (
+    <div
+      role="group"
+      aria-label={`${active} / ${all}`}
+      className="inline-flex shrink-0 rounded-md border border-gray-300 bg-white p-0.5 dark:border-gray-600 dark:bg-gray-800"
+    >
+      <button
+        type="button"
+        onClick={() => onChange(false)}
+        aria-pressed={!showClosed}
+        className={`${base} ${
+          !showClosed
+            ? 'bg-indigo-600 text-white'
+            : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
+        }`}
+      >
+        {active}
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(true)}
+        aria-pressed={showClosed}
+        className={`${base} ${
+          showClosed
+            ? 'bg-indigo-600 text-white'
+            : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
+        }`}
+      >
+        {all}
+      </button>
     </div>
   )
 }

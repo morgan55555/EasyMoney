@@ -34,6 +34,28 @@ html.dark {
   animation: btn-stripes-move 0.8s linear infinite;
 }
 
+/* Closed-group cards (Groups page): a static 45° hatch so closed groups are
+   glanceable next to active ones. A positioned pseudo-element (pointer-events:
+   none) keeps the card's own background colour underneath and never affects
+   layout; the low-opacity neutral grey reads on both light and dark themes. */
+.card-stripes {
+  position: relative;
+  overflow: hidden;
+}
+.card-stripes::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(107, 114, 128, 0.12) 0px,
+    rgba(107, 114, 128, 0.12) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+}
+
 /* Notification deep-link: a fading indigo ring around the element the View
    button scrolled to (lib/focus.ts adds .focus-flash for ~2.5s). Box-shadow
    only, so the layout never shifts, and it follows the element's own
