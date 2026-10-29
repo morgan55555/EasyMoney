@@ -455,40 +455,55 @@ export function ExpenseForm({ groupId, members, currency, initial, onDone }: Pro
         </div>
       ) : null}
 
-      {initial && attachment ? (
+      {initial ? (
         <div className="rounded-md border border-gray-200 dark:border-gray-800 p-3 space-y-2">
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('expenseForm.currentReceipt')}</p>
-          {previewUrl ? (
-            isPreviewImage ? (
-              <img src={previewUrl} alt={t('receipt.file')} className="max-h-48 max-w-full rounded-md border border-gray-200 dark:border-gray-800" />
-            ) : (
-              <iframe src={previewUrl} title={t('receipt.file')} className="h-48 w-full rounded-md border border-gray-200 dark:border-gray-800" />
-            )
-          ) : null}
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              ref={receiptInputRef}
-              type="file"
-              accept={ACCEPT}
-              className="hidden"
-              onChange={(e) => void replaceReceipt(e.target.files?.[0])}
-              aria-label={t('receipt.file')}
-            />
-            {previewUrl ? (
-              <Button variant="secondary" onClick={() => setOpenFull(true)}>
-                <IconEye />
-                {t('receipt.openFull')}
+          <input
+            ref={receiptInputRef}
+            type="file"
+            accept={ACCEPT}
+            className="hidden"
+            onChange={(e) => void replaceReceipt(e.target.files?.[0])}
+            aria-label={t('receipt.file')}
+          />
+          {attachment ? (
+            <>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('expenseForm.currentReceipt')}</p>
+              {previewUrl ? (
+                isPreviewImage ? (
+                  <img src={previewUrl} alt={t('receipt.file')} className="max-h-48 max-w-full rounded-md border border-gray-200 dark:border-gray-800" />
+                ) : (
+                  <iframe src={previewUrl} title={t('receipt.file')} className="h-48 w-full rounded-md border border-gray-200 dark:border-gray-800" />
+                )
+              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                {previewUrl ? (
+                  <Button variant="secondary" onClick={() => setOpenFull(true)}>
+                    <IconEye />
+                    {t('receipt.openFull')}
+                  </Button>
+                ) : null}
+                <Button variant="secondary" busy={receiptUpload.isPending} onClick={() => receiptInputRef.current?.click()}>
+                  <IconUpload />
+                  {t('receipt.replace')}
+                </Button>
+                <Button variant="secondary" busy={receiptDelete.isPending} onClick={() => setConfirmRemoveReceipt(true)}>
+                  <IconTrash />
+                  {t('receipt.remove')}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('expenseForm.receipt')}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t('expenseForm.receiptHint')}</p>
+              </div>
+              <Button variant="secondary" busy={receiptUpload.isPending} onClick={() => receiptInputRef.current?.click()}>
+                <IconPaperclip />
+                {t('receipt.attach')}
               </Button>
-            ) : null}
-            <Button variant="secondary" busy={receiptUpload.isPending} onClick={() => receiptInputRef.current?.click()}>
-              <IconUpload />
-              {t('receipt.replace')}
-            </Button>
-            <Button variant="secondary" busy={receiptDelete.isPending} onClick={() => setConfirmRemoveReceipt(true)}>
-              <IconTrash />
-              {t('receipt.remove')}
-            </Button>
-          </div>
+            </>
+          )}
           {receiptError ? <p className="text-xs text-red-600 dark:text-red-400">{receiptError}</p> : null}
         </div>
       ) : null}
