@@ -188,7 +188,7 @@ A new change request revokes the previous pending `password` token (the reissue 
 
 **Theme (dark/light/system).** A client-only preference (`light` | `dark` | `system`, default `system`), persisted in localStorage. `darkMode: "class"`: `light`/`dark` apply/remove a `.dark` class on `<html>`; `system` follows `prefers-color-scheme` (via a `matchMedia` listener). Not stored server-side, never part of the API.
 
-**SMTP master switch.** `SMTP_ENABLED` (default `true`) is the kill switch for all outbound mail: when `false`, `send_mail` is a log-only no-op **even when `SMTP_HOST` is set**, and all confirmation flows (registration, email change, password change) are skipped (they apply immediately). `SMTP_HOST` unset → log-only as before. Every mail path still goes through `services/mail.py`.
+**SMTP master switch.** `SMTP_ENABLED` (default `true`) is the kill switch for all outbound mail: when `false`, `send_mail` is a pure no-op — nothing is sent, nothing logged — **even when `SMTP_HOST` is set**, and all confirmation flows (registration, email change, password change) are skipped (they apply immediately). `SMTP_HOST` unset (with the switch on) → log-only dev mode as before. Every mail path still goes through `services/mail.py`.
 
 ## 3. Architecture & conventions
 

@@ -1,8 +1,10 @@
 """Mail transport (AGENTS.md §3.4, §2.13).
 
-``aiosmtplib`` when ``SMTP_HOST`` is set and ``SMTP_ENABLED`` is true;
-otherwise log-only (dev or kill switch). Every mail path in the app goes
-through this module — nothing else opens SMTP connections.
+``aiosmtplib`` when ``SMTP_HOST`` is set and ``SMTP_ENABLED`` is true.
+The kill switch (``SMTP_ENABLED=false``) makes sending a pure no-op even
+with a host configured; with no host set, messages are logged instead
+(dev mode). Every mail path in the app goes through this module — nothing
+else opens SMTP connections.
 
 User-controlled values (group names, display names) are escaped with
 ``html.escape`` in the **HTML** bodies of all templates; the subjects and
@@ -325,14 +327,15 @@ def _revert_url(token: str) -> str:
 
 
 async def send_mail(to: str, subject: str, text: str, html: str | None = None) -> None:
-    """Send one message; log it instead when mail is disabled or no host is set.
+    """Send one message; log it instead when no host is set (dev mode).
 
-    ``SMTP_ENABLED=false`` makes this a log-only no-op **even when**
-    ``SMTP_HOST`` is configured (the kill switch, §2.13).
+    ``SMTP_ENABLED=false`` makes this a pure no-op **even when**
+    ``SMTP_HOST`` is configured (the kill switch, §2.13): nothing is sent
+    and nothing is logged.
     """
     settings = get_settings()
     if not settings.smtp_enabled:
-        logger.info("[mail] (disabled) to=%s subject=%r", to, subject)
+        # Kill switch: mail is fully off — nothing to send, nothing to log.
         return
     msg = EmailMessage()
     msg["From"] = settings.smtp_from or DEFAULT_FROM
