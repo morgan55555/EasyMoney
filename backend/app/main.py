@@ -39,6 +39,7 @@ from app.core.errors import (
     Unauthorized,
     ValidationFailed,
 )
+from app.db.session import dispose_engine
 from app.workers import scheduler as scheduler_worker
 from app.ws import endpoint as ws_api
 from app.ws import hook as ws_hook
@@ -97,6 +98,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         scheduler.shutdown(wait=False)
         ws_hook.set_manager(None)
+        # Close the pooled DB connections on the live loop before the event
+        # loop itself goes down (clean shutdown in production; the same path
+        # keeps test clients from leaving the pool behind on a dead loop).
+        await dispose_engine()
 
 
 # OpenAPI tag metadata: one documented section per domain (the routers set
