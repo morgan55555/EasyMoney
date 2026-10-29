@@ -271,57 +271,64 @@ function StatsTab() {
   if (!s) return null
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <StatCard title={t('stats.users')}>
-        <StatRow label={t('stats.usersTotal')} value={String(s.users_total)} />
-        <StatRow label={t('stats.usersAdmin')} value={String(s.users_admin)} />
-        <StatRow label={t('stats.usersUnverified')} value={String(s.users_unverified)} />
-      </StatCard>
+    <div className="space-y-4">
+      <div className="flex items-center justify-end">
+        <Button variant="secondary" onClick={() => void stats.refetch()} busy={stats.isFetching}>
+          {t('admin.update')}
+        </Button>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <StatCard title={t('stats.users')}>
+          <StatRow label={t('stats.usersTotal')} value={String(s.users_total)} />
+          <StatRow label={t('stats.usersAdmin')} value={String(s.users_admin)} />
+          <StatRow label={t('stats.usersUnverified')} value={String(s.users_unverified)} />
+        </StatCard>
 
-      <StatCard title={t('stats.groups')}>
-        <StatRow label={t('stats.groupsActive')} value={String(s.groups_active)} />
-        <StatRow label={t('stats.groupsClosed')} value={String(s.groups_closed)} />
-      </StatCard>
+        <StatCard title={t('stats.groups')}>
+          <StatRow label={t('stats.groupsActive')} value={String(s.groups_active)} />
+          <StatRow label={t('stats.groupsClosed')} value={String(s.groups_closed)} />
+        </StatCard>
 
-      <StatCard title={t('stats.expenses')}>
-        <StatRow label={t('stats.expensesTotal')} value={String(s.expenses_total)} />
-        <p className="mt-3 text-xs uppercase tracking-wide text-gray-400">{t('stats.expensesByCurrency')}</p>
-        {s.expenses_by_currency.length === 0 ? (
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('stats.noData')}</p>
-        ) : (
-          <ul className="mt-1 space-y-1">
-            {s.expenses_by_currency.map((c) => (
-              <MoneyRow key={c.currency} currency={c.currency} total={c.total} locale={locale} />
-            ))}
-          </ul>
-        )}
-      </StatCard>
+        <StatCard title={t('stats.expenses')}>
+          <StatRow label={t('stats.expensesTotal')} value={String(s.expenses_total)} />
+          <p className="mt-3 text-xs uppercase tracking-wide text-gray-400">{t('stats.expensesByCurrency')}</p>
+          {s.expenses_by_currency.length === 0 ? (
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('stats.noData')}</p>
+          ) : (
+            <ul className="mt-1 space-y-1">
+              {s.expenses_by_currency.map((c) => (
+                <MoneyRow key={c.currency} currency={c.currency} total={c.total} locale={locale} />
+              ))}
+            </ul>
+          )}
+        </StatCard>
 
-      <StatCard title={t('stats.settlements')}>
-        <p className="text-xs uppercase tracking-wide text-gray-400">{t('stats.byState')}</p>
-        {Object.keys(s.settlements_by_state).length === 0 ? (
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('stats.noData')}</p>
-        ) : (
-          <ul className="mt-1 space-y-1">
-            {Object.entries(s.settlements_by_state).map(([state, count]) => (
-              <li key={state} className="flex items-center justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-300">{t('state.' + state)}</span>
-                <span className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{count}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-3 text-xs uppercase tracking-wide text-gray-400">{t('stats.confirmedByCurrency')}</p>
-        {s.settlements_confirmed_by_currency.length === 0 ? (
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('stats.noData')}</p>
-        ) : (
-          <ul className="mt-1 space-y-1">
-            {s.settlements_confirmed_by_currency.map((c) => (
-              <MoneyRow key={c.currency} currency={c.currency} total={c.total} locale={locale} />
-            ))}
-          </ul>
-        )}
-      </StatCard>
+        <StatCard title={t('stats.settlements')}>
+          <p className="text-xs uppercase tracking-wide text-gray-400">{t('stats.byState')}</p>
+          {Object.keys(s.settlements_by_state).length === 0 ? (
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('stats.noData')}</p>
+          ) : (
+            <ul className="mt-1 space-y-1">
+              {Object.entries(s.settlements_by_state).map(([state, count]) => (
+                <li key={state} className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-300">{t('state.' + state)}</span>
+                  <span className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 text-xs uppercase tracking-wide text-gray-400">{t('stats.confirmedByCurrency')}</p>
+          {s.settlements_confirmed_by_currency.length === 0 ? (
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('stats.noData')}</p>
+          ) : (
+            <ul className="mt-1 space-y-1">
+              {s.settlements_confirmed_by_currency.map((c) => (
+                <MoneyRow key={c.currency} currency={c.currency} total={c.total} locale={locale} />
+              ))}
+            </ul>
+          )}
+        </StatCard>
+      </div>
     </div>
   )
 }

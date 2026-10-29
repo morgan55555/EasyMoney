@@ -449,6 +449,7 @@ export const en: Dict = {
   'admin.createdError': 'Could not create the user',
   'admin.saveError': 'Could not save the user',
   'admin.lastAdmin': 'The last admin cannot be demoted this way.',
+  'admin.update': 'Update',
 
   // --- Admin statistics ------------------------------------------------------------------------
   'stats.users': 'Users',
