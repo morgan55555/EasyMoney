@@ -292,6 +292,8 @@ export const en: Dict = {
   'notif.memberJoined': '{{name}} joined the group',
   'notif.memberLeft': '{{name}} left the group',
   'notif.aMember': 'A member',
+  'notif.invited': '{{inviter}} invited you to join {{group}}',
+  'notif.join': 'Join',
   'notif.groupClosed': 'The group was closed',
   'notif.groupReopened': 'The group was reopened',
 

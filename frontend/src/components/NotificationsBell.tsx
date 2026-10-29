@@ -4,11 +4,13 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { useI18n, type TFunc } from '../i18n'
 import { relativeTime } from '../lib/dates'
 import { formatMoney } from '../lib/money'
 import { useMarkNotificationsRead, useNotifications } from '../query/queries'
+import type { NotificationOut } from '../types'
 
 function makeDescribe(t: TFunc, locale: string) {
   return (type: string, payload: Record<string, unknown> | null): string => {
@@ -47,6 +49,11 @@ function makeDescribe(t: TFunc, locale: string) {
         return t('notif.settlementRejected', { amount: amount(p.currency) })
       case 'settlement.cancelled':
         return t('notif.settlementCancelled', { amount: amount(p.currency) })
+      case 'invited':
+        return t('notif.invited', {
+          inviter: String(p.inviter_name ?? t('notif.aMember')),
+          group: String(p.group_name ?? ''),
+        })
       case 'member.joined':
         return t('notif.memberJoined', { name: String(p.display_name ?? t('notif.aMember')) })
       case 'member.left':
@@ -61,9 +68,21 @@ function makeDescribe(t: TFunc, locale: string) {
   }
 }
 
+/**
+ * An email-invite notification ("invited") carries an actionable Join button:
+ * the payload holds the invite token, and the button opens `/invite/{token}`
+ * to join. Returns the token, or null for non-actionable notifications.
+ */
+function invitedToken(n: NotificationOut): string | null {
+  if (n.type !== 'invited') return null
+  const tok = n.payload?.token
+  return typeof tok === 'string' && tok !== '' ? tok : null
+}
+
 export function NotificationsBell() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
   const notifications = useNotifications()
   const markRead = useMarkNotificationsRead()
   const { t, locale } = useI18n()
@@ -123,15 +142,32 @@ export function NotificationsBell() {
             ) : items.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400 px-3 py-4">{t('notif.empty')}</p>
             ) : (
-              items.map((n) => (
-                <div
-                  key={n.id}
-                  className={`px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 ${n.read_at ? 'text-gray-500 dark:text-gray-400' : 'bg-indigo-50/50 dark:bg-indigo-950/40 text-gray-800 dark:text-gray-100'}`}
-                >
-                  <p className="text-sm">{describe(n.type, n.payload)}</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{relativeTime(n.created_at, locale)}</p>
-                </div>
-              ))
+              items.map((n) => {
+                const token = invitedToken(n)
+                return (
+                  <div
+                    key={n.id}
+                    className={`flex items-start justify-between gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 ${n.read_at ? 'text-gray-500 dark:text-gray-400' : 'bg-indigo-50/50 dark:bg-indigo-950/40 text-gray-800 dark:text-gray-100'}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm">{describe(n.type, n.payload)}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{relativeTime(n.created_at, locale)}</p>
+                    </div>
+                    {token ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void markRead.mutate([n.id])
+                          navigate(`/invite/${token}`)
+                        }}
+                        className="shrink-0 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 rounded px-2 py-1"
+                      >
+                        {t('notif.join')}
+                      </button>
+                    ) : null}
+                  </div>
+                )
+              })
             )}
           </div>
         </div>

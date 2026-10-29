@@ -19,6 +19,7 @@ from app.core.errors import Conflict, Forbidden, NotFound, ValidationFailed
 from app.models.group import Group
 from app.models.invitation import Invitation
 from app.models.membership import Membership
+from app.models.notification import Notification
 from app.models.user import User
 from app.services import feed as feed_service
 from app.services import groups as groups_service
@@ -47,6 +48,25 @@ async def create_invite(
         status="active",
     )
     db.add(invite)
+    # An email invite addressed to an address that already has an account also
+    # bell-notifies that user in-app (§2.6), in addition to the email: they can
+    # open the notification to join the group. The row is staged in the same
+    # transaction so the invite and its notification commit together.
+    notifications: list[Notification] = []
+    if kind == "email" and invite.email_to:
+        invited = await db.scalar(select(User).where(User.email == invite.email_to))
+        if invited is not None:
+            notifications = await notifications_service.notify_users(
+                db,
+                [invited.id],
+                "invited",
+                {
+                    "group_id": group.id,
+                    "group_name": group.name,
+                    "token": invite.token,
+                    "inviter_name": actor.display_name,
+                },
+            )
     await db.commit()
     await db.refresh(invite)
     if kind == "email" and invite.email_to:
@@ -57,6 +77,8 @@ async def create_invite(
             await mail_service.send_mail(invite.email_to, subject, text, html)
         except Exception:  # mail must never block the invite itself
             logger.exception("Failed to send invite email (token=%s)", invite.token)
+    if notifications:
+        await ws_hook.emit_notifications(group.id, notifications)
     return invite
 
 

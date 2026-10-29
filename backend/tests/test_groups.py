@@ -113,6 +113,62 @@ async def _joiner_is_not_notified_about_own_join(factory: async_sessionmaker) ->
     assert await _notifications(factory) == [(ALICE, "member.joined")]
 
 
+async def _email_invite_bell_notifies_existing_user(factory: async_sessionmaker) -> None:
+    """§2.6: an email invite addressed to an existing account bell-notifies that
+    user (in addition to the email) so they can join from the notification."""
+    await _mk_users(factory, (ALICE, BOB))
+    await _mk_group(factory, GROUP_ID, ALICE, (ALICE,))
+    sent: list[str] = []
+    original = mail_service.send_mail
+
+    async def recorder(to: str, subject: str, text: str, html: str | None = None) -> None:
+        sent.append(to)
+
+    mail_service.send_mail = recorder
+    try:
+        async with factory() as db:
+            group = await db.get(Group, GROUP_ID)
+            alice = await db.get(User, ALICE)
+            assert group is not None and alice is not None
+            # bob has an account (u2@test.local) → email + in-app "invited" bell.
+            invite = await invites_service.create_invite(db, group, alice, "email", "u2@test.local")
+    finally:
+        mail_service.send_mail = original
+    assert sent == ["u2@test.local"]
+    assert await _notifications(factory) == [(BOB, "invited")]
+    # The payload carries everything the bell needs to open the invite page.
+    async with factory() as db:
+        row = (await db.execute(select(Notification).where(Notification.user_id == BOB))).scalar_one()
+    assert row.payload["group_id"] == GROUP_ID
+    assert row.payload["group_name"] == f"Group {GROUP_ID}"
+    assert row.payload["inviter_name"] == "User 1"
+    assert row.payload["token"] == invite.token
+
+
+async def _email_invite_no_bell_for_unknown_email(factory: async_sessionmaker) -> None:
+    """An email invite to an address with no account only emails — no bell row."""
+    await _mk_users(factory, (ALICE,))
+    await _mk_group(factory, GROUP_ID, ALICE, (ALICE,))
+    sent: list[str] = []
+    original = mail_service.send_mail
+
+    async def recorder(to: str, subject: str, text: str, html: str | None = None) -> None:
+        sent.append(to)
+
+    mail_service.send_mail = recorder
+    try:
+        async with factory() as db:
+            group = await db.get(Group, GROUP_ID)
+            alice = await db.get(User, ALICE)
+            assert group is not None and alice is not None
+            # stranger@test.local has no account → email only, no notification.
+            await invites_service.create_invite(db, group, alice, "email", "stranger@test.local")
+    finally:
+        mail_service.send_mail = original
+    assert sent == ["stranger@test.local"]
+    assert await _notifications(factory) == []
+
+
 # --- close / reopen write-blocking (§2.9) ------------------------------------
 
 
@@ -191,6 +247,14 @@ def test_create_group_does_not_notify_creator(run_db) -> None:
 
 def test_invite_joiner_not_notified_about_own_join(run_db) -> None:
     run_db(_joiner_is_not_notified_about_own_join)
+
+
+def test_email_invite_bell_notifies_existing_user(run_db) -> None:
+    run_db(_email_invite_bell_notifies_existing_user)
+
+
+def test_email_invite_no_bell_for_unknown_email(run_db) -> None:
+    run_db(_email_invite_no_bell_for_unknown_email)
 
 
 def test_close_blocks_writes_and_reopen_restores(run_db) -> None:

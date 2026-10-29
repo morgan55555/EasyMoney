@@ -293,6 +293,8 @@ export const ru: Dict = {
   'notif.memberJoined': '{{name}} присоединился(ась) к группе',
   'notif.memberLeft': '{{name}} покинул(а) группу',
   'notif.aMember': 'Участник',
+  'notif.invited': '{{inviter}} пригласил(а) вас в группу {{group}}',
+  'notif.join': 'Присоединиться',
   'notif.groupClosed': 'Группа была закрыта',
   'notif.groupReopened': 'Группа была открыта снова',
 

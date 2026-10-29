@@ -8,6 +8,7 @@
 import { createElement } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { QueryClient } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 
 import type { ActivityEventOut, InviteOut, NotificationOut, UserOut } from '../../types'
 import { keys } from '../../query/queries'
@@ -70,7 +71,7 @@ describe('XSS guard', () => {
   })
 
   it('notifications render a hostile description as inert text', () => {
-    r = render(createElement(NotificationsBell), {
+    r = render(createElement(MemoryRouter, null, createElement(NotificationsBell)), {
       seed: (qc: QueryClient) => {
         const item: NotificationOut = {
           id: 1,
