@@ -3,7 +3,9 @@
 One ``Notification`` row per user per event. ``notify_users`` inserts the rows
 inside the caller's transaction (same commit as the action + feed row); the
 WebSocket push happens post-commit (B8). Read state is explicit:
-``POST /notifications/read`` sets ``read_at``.
+``POST /notifications/read`` sets ``read_at`` and, post-commit, fans a
+``notification.read`` event out to every open tab of the user so the unread
+badge stays in sync across tabs/windows of the same account (req 7).
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import Notification
 from app.models.user import User
+from app.ws import hook as ws_hook
 
 
 async def notify_users(
@@ -70,4 +73,8 @@ async def mark_read(db: AsyncSession, user: User, ids: list[int] | None = None) 
             notification.read_at = now
             marked += 1
     await db.commit()
+    # Post-commit: tell the user's other open tabs the bell changed (req 7).
+    # Nothing flipped (already-read rows are skipped) → no event to send.
+    if marked:
+        await ws_hook.emit_notification_read(user.id)
     return marked

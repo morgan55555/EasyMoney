@@ -19,7 +19,9 @@ Covered:
   * dynamic re-subscribe: a user who joins mid-session (link invite accepted)
     starts receiving events on their existing open socket;
   * join bell: existing members are notified of the join, the joiner themself
-    is excluded (§2.6).
+    is excluded (§2.6);
+  * read sync: a mark-read in one tab of a user fans a ``notification.read``
+    event to every one of that user's open tabs, and to no other user (req 7).
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ from app.schemas.expenses import ExpenseCreate, ParticipantIn
 from app.services import expenses as expenses_service
 from app.services import groups as groups_service
 from app.services import invites as invites_service
+from app.services import notifications as notifications_service
 from app.ws import hook as ws_hook
 from app.ws.registry import ConnectionManager
 
@@ -262,6 +265,21 @@ async def _run(factory: async_sessionmaker, manager: ConnectionManager) -> None:
 
     # The other-group member still got none of it.
     assert carol_tab.sent == []
+
+    # --- mark-read fans out to every open tab of the user (req 7) ---------------
+    # Alice's bell holds the expense + member.joined rows from above (all unread).
+    # She marks them read from one tab; both of her tabs must learn of the
+    # read-state change via the user-scoped `notification.read` event, while no
+    # other user's socket does.
+    async with factory() as db:
+        alice = await db.get(User, ALICE)
+        assert alice is not None
+        marked = await notifications_service.mark_read(db, alice, None)
+        assert marked >= 1
+    for sock in (alice_tab1, alice_tab2):
+        assert len(_of_type(sock, "notification.read")) == 1
+    for sock in (bob_tab, carol_tab, dave_tab):
+        assert _of_type(sock, "notification.read") == []
 
 
 def test_ws_multiuser(run_db) -> None:

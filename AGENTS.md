@@ -101,7 +101,7 @@ Note: balances move only on confirmation, and they are computed on read, so if t
 | Member joined / left | all members **except the actor** (a user is never notified about their own join/leave) |
 | Group closed / reopened | all members |
 
-Notifications are read via the bell; mark-read is explicit (`POST /notifications/read`).
+Notifications are read via the bell; mark-read is explicit (`POST /notifications/read`). Marking read is a per-user state change that is not group-scoped, so it syncs across tabs via a dedicated `notification.read` WS event (user-scoped fan-out, post-commit): every open tab of the user refetches the bell and clears its unread badge — the read state never depends on the 60 s polling safety net.
 
 ### 2.7 Overdue debts & reminder emails
 
@@ -232,6 +232,7 @@ Rules:
 | `member.joined` / `member.left` | member user |
 | `group.closed` / `group.reopened` | group |
 | `notification.created` | the notification (bell count) |
+| `notification.read` | read-state change — no snapshot, no payload; the client refetches the bell (keeps the unread badge in sync across all tabs/windows of the same user, req 7) |
 
 - Client→server: only pings. No client commands (all mutations are REST).
 - Reconnect policy (frontend): exponential backoff; on reconnect the client refetches its data (REST) before trusting state.

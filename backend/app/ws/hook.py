@@ -9,6 +9,9 @@ its transaction commits:
   correct post-commit, so the push is just a re-read);
 * ``emit_notifications(group_id, rows)`` — user-scoped fan-out of the bell:
   each notified user's tabs learn of their own notification row;
+* ``emit_notification_read(user_id)`` — user-scoped read-state change: every
+  open tab of the user refetches the bell so a mark-read in one tab clears the
+  unread badge in the others (AGENTS.md §2.6, req 7);
 * ``resubscribe_user(user_id, group_id)`` — add a group to every open socket
   of the user (mid-session join, AGENTS.md §3.2).
 
@@ -112,6 +115,18 @@ async def emit_notifications(group_id: int, notifications: list[Notification]) -
             }
         )
         await _manager.broadcast_to_users({notification.user_id}, message)
+
+
+async def emit_notification_read(user_id: int) -> None:
+    """Read-state change: one ``notification.read`` to every tab of the user.
+
+    The client only needs the signal to refetch the bell (the list endpoint is
+    the source of truth), so the payload carries no data.
+    """
+    if _manager is None:
+        return
+    message = json.dumps({"type": "notification.read", "group_id": None, "data": {}})
+    await _manager.broadcast_to_users({user_id}, message)
 
 
 def resubscribe_user(user_id: int, group_id: int) -> None:

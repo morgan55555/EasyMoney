@@ -130,6 +130,12 @@ export function bindSocket(): void {
       playNotification()
       return
     }
+    // A tab/window of this same user marked notifications read: refetch the
+    // bell so the unread badge and rows clear everywhere (req 7).
+    if (msg.type === 'notification.read') {
+      void queryClient.invalidateQueries({ queryKey: keys.notifications })
+      return
+    }
     const groupId = msg.group_id
     if (groupId === null || groupId === undefined) return
     // Embedded fresh snapshot: patch the balances cache immediately.
