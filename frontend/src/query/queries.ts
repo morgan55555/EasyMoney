@@ -138,6 +138,12 @@ export function bindSocket(): void {
       queryClient.setQueryData<GroupBalancesOut>(keys.balances(groupId), snapshot)
     }
     invalidateGroup(groupId)
+    // The cross-group overview sums the caller's balances over EVERY group, so
+    // it is not part of the per-group `invalidateGroup` set. A balance change
+    // arriving over the socket (another user or another tab) must refetch it —
+    // otherwise the Overview stays stale until a reload. Local mutations already
+    // invalidate it themselves; this covers the remote path.
+    void queryClient.invalidateQueries({ queryKey: keys.overview })
   })
 }
 
