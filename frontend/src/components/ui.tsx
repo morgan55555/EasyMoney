@@ -7,13 +7,24 @@ import { createPortal } from 'react-dom'
 
 // --- Spinner ------------------------------------------------------------------
 
+/**
+ * Icon-sized loading glyph. Sized to the button's text line (no extra
+ * padding) so a busy button never changes height — the page-level `Spinner`
+ * below reuses it and adds its own `py-8` for centered page loading states.
+ */
+export function SpinnerIcon() {
+  return (
+    <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    </svg>
+  )
+}
+
 export function Spinner({ label = 'Loading…' }: { label?: string }) {
   return (
     <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm py-8 justify-center">
-      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-      </svg>
+      <SpinnerIcon />
       {label}
     </div>
   )
@@ -59,7 +70,7 @@ export function Button({ variant = 'primary', busy = false, disabled, className 
       disabled={disabled || busy}
       {...rest}
     >
-      {busy ? <Spinner label="" /> : null}
+      {busy ? <SpinnerIcon /> : null}
       {children}
     </button>
   )
@@ -215,7 +226,7 @@ export function IconButton({
       className={`inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${iconButtonStyles[variant]} ${className}`}
       {...rest}
     >
-      {busy ? <Spinner label="" /> : children}
+      {busy ? <SpinnerIcon /> : children}
     </button>
   )
 }
