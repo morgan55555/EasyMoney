@@ -42,31 +42,32 @@ A client–server web application for managing shared expenses — for a trip, a
 ## Architecture
 
 ```
-                 ┌───────────────┐
-   two+ tabs ──▶ │   frontend    │
-   (React SPA)   │ nginx + static│──── REST /api/* ────┐
-                 └───────────────┘                     │
-                       │  ▲                            ▼
-                       │  │ WebSocket /ws      ┌───────────────────┐
-                       └──┴───────────────────▶│      backend      │
-                        (one socket per tab)   │ FastAPI, async    │
-                                               │ (Python 3.12)     │
-                                               └──┬──────────┬─────┘
-                                              SQL │          │ SMTP
-                                        ┌─────────▼──┐  ┌────▼─────────┐
-                                        │ PostgreSQL │  │   mailpit    │
-                                        │     16     │  │ (dev mail)   │
-                                        └────────────┘  └──────────────┘
+                   ┌───────────────┐
+    two+ tabs ──▶  │   frontend    │
+    (React SPA)    │ nginx + static│──── REST /api/* ────┐
+                   └───────────────┘                     │
+                       │  ▲                              ▼
+                       │  │ WebSocket /ws    ┌───────────────────────────────────────┐
+                       └──┴─────────────────▶│                backend                │
+                      (one socket per tab)   │            FastAPI, async             │
+                                             │             (Python 3.12)             │
+                                             └────┬──────────┬───────────────┬───────┘
+                                              SQL │    Redis │               │ SMTP
+                                        ┌─────────▼──┐   ┌───▼────┐   ┌──────▼─────┐
+                                        │ PostgreSQL │   │  Redis │   │   mailpit  │
+                                        │     16     │   │ (opt.) │   │ (dev mail) │
+                                        └────────────┘   └────────┘   └────────────┘
 ```
 
 - **`frontend/`** — React 18 + TypeScript (Vite), TanStack Query, served by nginx. nginx proxies `/api/*` and `/ws` to the backend, so there are no CORS issues in production.
 - **`backend/`** — FastAPI (async), SQLAlchemy 2.0 + asyncpg, Alembic migrations, Pydantic v2, APScheduler for reminder emails, aiosmtplib for mail.
 - **`postgres`** — `postgres:16` with a named volume.
+- **`redis`** — `redis:7-alpine`, ephemeral (no volume). The cross-replica WS event bus and the short-TTL display caches; optional — with `REDIS_URL` unset the backend runs the in-process bus exactly as before.
 - **`mailpit`** — dev-only SMTP server so invites/reminders can be inspected in a browser (http://localhost:8025). In production, point `SMTP_*` vars at a real provider.
 
 **Emails in dev.** All transactional email (invite, overdue reminder, close summary) goes to the bundled mailpit — open the Web UI at http://localhost:8025 to see exactly what recipients get (each email carries the app icon). No preview files are generated; just trigger the event (send an invite, wait for the hourly reminder scan, close a group) and inspect mailpit.
 
-**Real-time sync model.** Every authenticated browser tab opens one WebSocket to `/ws`. The server keeps an in-memory registry of sockets per `user_id` and fans every group event out to **all** sockets of that user — this is what makes multiple tabs of the same user (and multiple devices) update instantly and identically. Every event carries a fresh balance snapshot, and every REST response is computed on read from the database, so there is no stale shared state. (The registry is in-process: v1 runs a single backend replica; scaling out horizontally would add a WS pub/sub broker, see Roadmap.)
+**Real-time sync model.** Every authenticated browser tab opens one WebSocket to `/ws`. Each backend replica keeps an in-memory registry of its sockets per `user_id`, and fan-out goes through the **event bus** — the in-process registry when `REDIS_URL` is unset, Redis Pub/Sub (`easymoney:events`) when it is — so with several replicas behind a load balancer a REST write that lands on replica A still reaches a socket parked on replica B. This is what makes multiple tabs of the same user (and multiple devices, across replicas) update instantly and identically. Delivery is **at-most-once** (Pub/Sub drops messages to absent subscribers); the backstop is the client's reconnect behaviour, which refetches its state via REST before trusting anything. Every event carries a fresh balance snapshot, and every REST response is computed on read from the database, so there is no stale shared state. Two derived reads are cached in Redis with short TTLs (the group-balance snapshot for 30 s, the WS-handshake group list for 300 s — both invalidated exactly on the change), and the hourly overdue-reminder scan runs once across all replicas thanks to a Redis lock.
 
 ---
 
@@ -80,7 +81,8 @@ A client–server web application for managing shared expenses — for a trip, a
 | Validation / settings | Pydantic v2, pydantic-settings |
 | Passwords | Argon2id (argon2-cffi) |
 | Auth | JWT access token (15 min) + refresh token (7 days, persisted jti, revocable) |
-| Real-time | WebSocket (native FastAPI), per-user connection fan-out |
+| Real-time | WebSocket (native FastAPI), per-user connection fan-out; Redis Pub/Sub bus across replicas (optional) |
+| Cross-replica state | Redis (optional, `redis-py`): event bus, short-TTL display caches (balance snapshot, handshake group list), single-flight scheduler lock — no money state ever |
 | Background jobs | APScheduler (AsyncIOScheduler) — hourly reminder scan |
 | Mail | aiosmtplib; SMTP via env vars, log-only in dev |
 | Files | S3-compatible object store (LocalStack in compose); optional local-disk backend |
@@ -144,6 +146,10 @@ Copy the values from the table below into `.env` (a `.env.example` will ship wit
 | `S3_REGION` | `us-east-1` | The S3 region (drives the `LocationConstraint` when the bucket is created) |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | `test` / `test` (compose) | Dummy credentials for LocalStack. Leave both empty for real AWS to let boto3 resolve them from the environment (`AWS_*`) / IAM |
 | `UPLOAD_DIR` | `/data/uploads` | Where receipt files are stored — only used when `STORAGE_BACKEND=local` |
+| `REDIS_URL` | unset | Redis connection for the cross-replica event bus, the display caches and the scheduler lock. Unset = local mode: the in-process bus, no caches (exactly the pre-Redis behaviour). Compose default: `redis://redis:6379/0` |
+| `SNAPSHOT_CACHE_TTL_S` | `30` | TTL of the group-balance snapshot cache (Redis mode only; every group event refreshes it exactly, the TTL is just the safety net) |
+| `USER_GROUPS_CACHE_TTL_S` | `300` | TTL of the WS-handshake group-list cache (Redis mode only; invalidated on join/leave) |
+| `SCHEDULER_LOCK_TTL_S` | `3300` | TTL of the single-flight lock for the hourly overdue-reminder scan (Redis mode only) |
 
 ### Object storage (receipts)
 
@@ -164,6 +170,26 @@ automatically at boot, so `docker compose up --build` just works.
 > Moving an existing deployment: this changes where *new* receipts go. A clean checkout
 > has no pre-existing on-disk corpus to migrate; if a deployment already has receipts on
 > the old `uploads` volume, copy them into the bucket once (out of scope here).
+
+### Real-time & caching (Redis)
+
+Redis is the glue that lets the backend run as **several replicas** behind a load
+balancer: it carries the WS event bus (the `easymoney:events` Pub/Sub channel), holds
+two short-TTL display caches (the group-balance snapshot, the WS-handshake group list),
+and provides the single-flight lock for the hourly reminder scan. It holds **no money
+state** — Postgres stays the single source of truth, and every Redis value is either
+rebuilt on demand (a cache miss recomputes from the DB) or invalidated on the same
+post-commit path that pushes the WS event.
+
+- **Compose (default):** a `redis:7-alpine` service, ephemeral (no volume). The backend
+  `depends_on` it being healthy and gets `REDIS_URL=redis://redis:6379/0`. The stack
+  works as a single replica out of the box; to scale it, `docker compose up --build
+  --scale backend=2` — no sticky sessions, no per-replica state.
+- **Production:** point `REDIS_URL` at a managed Redis (ElastiCache, MemoryDB, or
+  self-hosted). Pub/Sub delivery is at-most-once by design; the client's REST refetch
+  on reconnect is the backstop for a dropped event.
+- **Local dev / tests:** leave `REDIS_URL` unset — the backend runs the in-process bus
+  and skips the caches, exactly the pre-Redis behaviour.
 
 ### API docs (Swagger / ReDoc)
 
@@ -302,6 +328,7 @@ AGENTS.md is the binding spec; if this README and AGENTS.md ever disagree, AGENT
 | Per-currency groups, no FX conversion | Cross-group view sums per currency only; converting currencies requires a rate source and audit semantics — deliberately out of scope for v1. |
 | Soft delete for expenses | The activity feed must remain an honest history ("Alice deleted an expense"), and recalculation simply excludes deleted rows. |
 | mailpit in compose | Zero-config local mail testing; production swaps in real `SMTP_*` vars. |
+| Redis for the cross-replica bus, caches and scheduler lock — optional | Postgres stays the single source of truth for money; Redis carries only derived/ephemeral state (WS fan-out, 30 s / 300 s display caches, single-flight lock). Unset `REDIS_URL` = the in-process behaviour, so Redis is never a hard dependency. |
 
 ---
 
@@ -309,6 +336,7 @@ AGENTS.md is the binding spec; if this README and AGENTS.md ever disagree, AGENT
 
 - **Rate limiting is a proxy responsibility.** The app does no in-request throttling by design (a limiter would add a dependency); put it in front of nginx/backend (e.g. nginx `limit_req`, Caddy, or your CDN/edge WAF) if you expose it beyond your trusted network.
 - **Docs off by default.** The OpenAPI docs (`/api/docs`, `/api/redoc`, `/api/openapi.json`) are not mounted unless `EXPOSE_API_DOCS=true`, and the backend port is not published by default (only the frontend on :8081 is). Enable both per-environment as needed.
+- **Multiple backend replicas.** With `REDIS_URL` set, run any number of backend replicas behind the load balancer (compose: `docker compose up --build --scale backend=2`). All replicas share the WS event bus, the caches and the single-flight reminder lock; sticky sessions are not needed — a socket stays on the replica that accepted it, and cross-replica events arrive over the bus. With `REDIS_URL` unset, keep a single replica (the bus is in-process).
 
 ## License
 
@@ -317,5 +345,4 @@ This project is licensed under the [GNU General Public License v3.0](LICENSE) (G
 ## Out of scope / roadmap
 
 - Multi-currency group and automatic currency conversion (groups are single-currency by design; cross-group totals are per-currency).
-- Horizontal backend scaling behind a load balancer (needs a WS pub/sub broker, e.g. Redis).
 - Mobile app.

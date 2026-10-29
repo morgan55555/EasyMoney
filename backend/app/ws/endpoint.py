@@ -24,6 +24,7 @@ from app.db.session import get_session_factory
 from app.models.membership import Membership
 from app.models.user import User
 from app.ws import hook as ws_hook
+from app.ws import user_groups
 
 router = APIRouter()
 
@@ -62,11 +63,20 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         if user is None:
             await _reject(websocket, "Unknown user")
             return
-        group_ids = (
-            (await db.execute(select(Membership.group_id).where(Membership.user_id == user_id)))
-            .scalars()
-            .all()
-        )
+
+    # The group set rides the handshake cache (AGENTS.md §3.2): every tab
+    # connect / 15-min token-expiry reconnect would otherwise re-query
+    # memberships. The DB query runs only on a cache miss (local mode, or a
+    # Redis error — the cache is fail-open and transparent).
+    async def _fetch_groups() -> list[int]:
+        async with factory() as db:
+            return list(
+                (await db.execute(select(Membership.group_id).where(Membership.user_id == user_id)))
+                .scalars()
+                .all()
+            )
+
+    group_ids = await user_groups.user_group_ids(user_id, _fetch_groups)
 
     # Register the socket first — connect is the only path into _socket_users,
     # so subscribe_group below would otherwise silently no-op — then subscribe

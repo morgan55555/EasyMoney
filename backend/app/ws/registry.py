@@ -76,6 +76,14 @@ class ConnectionManager:
             if uid == user_id:
                 self.subscribe_group(ws, group_id)
 
+    def unsubscribe_user_from_group(self, user_id: int, group_id: int) -> None:
+        """Mid-session leave/remove (AGENTS.md §3.2): remove the group from
+        *every* socket of the user, so a leaver's open tabs stop receiving
+        the group's events immediately (idempotent)."""
+        for ws, uid in list(self._socket_users.items()):
+            if uid == user_id:
+                self.unsubscribe_group(ws, group_id)
+
     # --- fan-outs -------------------------------------------------------------
 
     def user_sockets(self, user_id: int) -> list[Sendable]:

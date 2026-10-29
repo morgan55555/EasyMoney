@@ -14,7 +14,8 @@ def test_health() -> None:
     client = TestClient(create_app())
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    # No lifespan (no ``with``) and no REDIS_URL: the bus reports local mode.
+    assert response.json() == {"status": "ok", "redis": "off"}
 
 
 class TestApiDocsToggle:

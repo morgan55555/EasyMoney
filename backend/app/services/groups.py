@@ -64,7 +64,7 @@ async def create_group(db: AsyncSession, user: User, name: str, currency: str) -
     await db.refresh(group)
     # The creator's already-open tabs get the new group immediately: re-
     # subscribe them before the fan-out so they see the member.joined event.
-    ws_hook.resubscribe_user(user.id, group.id)
+    await ws_hook.resubscribe_user(user.id, group.id)
     await ws_hook.emit_group(db, group, "member.joined", payload)
     return group
 
@@ -168,6 +168,9 @@ async def leave_group(db: AsyncSession, group: Group, user: User) -> None:
     )
     notifications = await notifications_service.notify_users(db, remaining, "member.left", payload)
     await db.commit()
+    # The leaver's open tabs stop receiving the group's events immediately,
+    # before the fan-out (they no longer concern the group).
+    await ws_hook.unsubscribe_user(user.id, group.id)
     await ws_hook.emit_group(db, group, "member.left", payload)
     await ws_hook.emit_notifications(group.id, notifications)
 
@@ -321,5 +324,8 @@ async def remove_member(db: AsyncSession, group: Group, actor: User, user_id: in
     )
     notifications = await notifications_service.notify_users(db, remaining, "member.left", payload)
     await db.commit()
+    # The removed member's open tabs stop receiving the group's events
+    # immediately, before the fan-out.
+    await ws_hook.unsubscribe_user(user_id, group.id)
     await ws_hook.emit_group(db, group, "member.left", payload)
     await ws_hook.emit_notifications(group.id, notifications)

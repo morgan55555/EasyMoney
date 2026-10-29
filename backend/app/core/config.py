@@ -107,6 +107,23 @@ class Settings(BaseSettings):
     # Only used when ``storage_backend`` is "local".
     upload_dir: str = "/data/uploads"
 
+    # --- Redis (cross-instance real-time bus + caches; optional) ---
+    # Empty = local mode: WS fan-out stays process-local, the caches are
+    # skipped and the reminder scan runs in every process — exactly the
+    # pre-Redis behaviour (bare dev and the whole test suite run this way).
+    redis_url: str = ""
+    # Balance-snapshot cache TTL (safety net). The exact invalidation happens
+    # on every group mutation via the same post-commit path that pushes the
+    # WS event, so the TTL only covers a missed emit.
+    snapshot_cache_ttl_s: int = 30
+    # WS-handshake group-list cache TTL (every tab + every ~15 min token-
+    # expiry reconnect re-queries otherwise).
+    user_groups_cache_ttl_s: int = 300
+    # Single-flight lock TTL for the hourly reminder scan: below the 1 h
+    # interval (a dead holder can never block the next run) and far above any
+    # realistic scan duration.
+    scheduler_lock_ttl_s: int = 3300
+
     # --- CORS ---
     # Stored as a raw string so pydantic-settings does not attempt JSON parsing;
     # the list is derived via the property below (comma-separated in the env).

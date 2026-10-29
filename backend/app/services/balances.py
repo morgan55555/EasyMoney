@@ -9,19 +9,28 @@ and what the WS layer pushes on every event (B8).
 
 from __future__ import annotations
 
+import json
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
+from app.core.redis_client import get_redis
 from app.models.expense import Expense
 from app.models.expense_participant import ExpenseParticipant
 from app.models.group import Group
 from app.models.membership import Membership
 from app.models.settlement import Settlement
 from app.models.user import User
+from app.schemas.user import avatar_url
+from app.services import currency as currency_service
+
+logger = logging.getLogger("easymoney.balances")
 
 
 def _dec(value: Decimal | None) -> Decimal:
@@ -315,3 +324,94 @@ async def group_balance_snapshot(db: AsyncSession, group: Group) -> GroupBalance
         pairs=tuple(pairwise_debts(balances)),
         transfers=tuple(optimize_settlements(balances)),
     )
+
+
+# --- Wire dict + Redis snapshot cache (display reads only) -------------------
+#
+# The cache serves display reads only (``GET /groups/{id}/balances``). It is
+# fail-open — any Redis error falls back to the DB path — and never affects
+# business validation: settlement proposals still read the pairwise view on
+# read (invariant 4 is untouched). Invalidation is exact: every group
+# mutation goes through ``ws_hook.emit_group``, which refreshes the key with
+# the same wire dict it pushes over the WS (``refresh_snapshot_cache``); the
+# TTL is only the safety net for a missed emit.
+
+
+def _snapshot_key(group_id: int) -> str:
+    return f"easymoney:snapshot:{group_id}"
+
+
+def _transfer_wire(t: Transfer, cur: str) -> dict[str, Any]:
+    return {
+        "from_user_id": t.from_user_id,
+        "to_user_id": t.to_user_id,
+        "amount": currency_service.format_money(t.amount, cur),
+    }
+
+
+def snapshot_to_wire(snapshot: GroupBalanceSnapshot) -> dict[str, Any]:
+    """The snapshot as the wire dict (the ``group_balances`` payload).
+
+    Same shape as ``GET /groups/{id}/balances``: per-user balances, the
+    pairwise view and the suggested transfers — money as strings (§2.12).
+    """
+    cur = snapshot.currency
+    return {
+        "currency": cur,
+        "balances": [
+            {
+                "user_id": b.user_id,
+                "display_name": b.display_name,
+                "balance": currency_service.format_money(b.balance, cur),
+                "avatar_url": avatar_url(b.user_id, b.avatar_data),
+            }
+            for b in snapshot.balances
+        ],
+        "pairs": [_transfer_wire(t, cur) for t in snapshot.pairs],
+        "transfers": [_transfer_wire(t, cur) for t in snapshot.transfers],
+    }
+
+
+async def load_balances_wire(db: AsyncSession, group: Group) -> dict[str, Any]:
+    """The group-balance wire dict for display, with the snapshot cache.
+
+    Cache hit → return as-is (no DB); miss → compute the snapshot, store the
+    wire dict (TTL ``snapshot_cache_ttl_s``) and return it. Local mode
+    (no Redis) is the plain compute path; a dead Redis is fail-open.
+    """
+    key = _snapshot_key(group.id)
+    redis = get_redis()
+    if redis is not None:
+        try:
+            cached = await redis.get(key)
+        except Exception:
+            logger.warning("Snapshot cache read failed; computing from DB", exc_info=True)
+        else:
+            if cached is not None:
+                try:
+                    cached_wire = json.loads(cached)
+                except ValueError:
+                    logger.warning("Snapshot cache value unparseable; recomputing")
+                else:
+                    # json.loads is untyped (Any); the stored value is the wire dict
+                    if isinstance(cached_wire, dict):
+                        return cast(dict[str, Any], cached_wire)
+    wire = snapshot_to_wire(await group_balance_snapshot(db, group))
+    await refresh_snapshot_cache(group.id, wire)
+    return wire
+
+
+async def refresh_snapshot_cache(group_id: int, wire: dict[str, Any]) -> None:
+    """Store the fresh wire dict (called from the post-commit emit path).
+
+    Fail-open: a write failure only means the next read recomputes.
+    """
+    redis = get_redis()
+    if redis is None:
+        return
+    try:
+        await redis.set(
+            _snapshot_key(group_id), json.dumps(wire), ex=get_settings().snapshot_cache_ttl_s
+        )
+    except Exception:
+        logger.warning("Snapshot cache refresh failed", exc_info=True)

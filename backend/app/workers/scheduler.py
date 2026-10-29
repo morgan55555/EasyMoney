@@ -15,6 +15,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.db.session import get_session_factory
 from app.services import reminders as reminders_service
+from app.workers import lock as scan_lock
 
 logger = logging.getLogger("easymoney.scheduler")
 
@@ -22,10 +23,20 @@ JOB_ID = "overdue-reminder-scan"
 
 
 async def scan_once() -> None:
-    """One full reminder pass (also the one-shot entry point)."""
-    sent = await reminders_service.run_reminder_scan(get_session_factory())
-    if sent:
-        logger.info("Overdue reminder scan: %d email(s) sent", sent)
+    """One full reminder pass (also the one-shot entry point).
+
+    Single-flight: with multiple replicas only the lock holder runs (§2.7);
+    local mode / Redis outage runs in every process, as before.
+    """
+    if not await scan_lock.acquire():
+        logger.debug("Overdue reminder scan: lock held by another replica, skipping")
+        return
+    try:
+        sent = await reminders_service.run_reminder_scan(get_session_factory())
+        if sent:
+            logger.info("Overdue reminder scan: %d email(s) sent", sent)
+    finally:
+        await scan_lock.release()
 
 
 def start_scheduler() -> AsyncIOScheduler:

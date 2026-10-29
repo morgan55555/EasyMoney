@@ -120,6 +120,8 @@ Scheduler (APScheduler, hourly):
 
 Reminders apply to **closed groups too** until settled (the close summary is not a settlement).
 
+**Single-flight across replicas.** With several backend replicas behind a load balancer the hourly scan is guarded by a Redis lock (`easymoney:lock:overdue-reminder-scan`, `SET <instance_id> NX EX SCHEDULER_LOCK_TTL_S`, release = compare-and-delete by owner so a stale lock of a dead replica is never removed) — exactly one replica runs the scan at a time. With `REDIS_URL` unset the lock is a no-op (a single process already guarantees single-flight). The lock fails open on a Redis error: the scan runs, and the `last_reminder_sent_at` interval still caps repeats per (member, group) pair.
+
 ### 2.8 Concurrent writes
 
 - Two members adding expenses simultaneously: two independent transactions; both commit (no shared mutable row). Balances are aggregates, so the sum-zero invariant and the "both recorded" requirement hold without locking.
@@ -196,10 +198,11 @@ A new change request revokes the previous pending `password` token (the reissue 
 
 ```
 app/
-  main.py            # create_app(), lifespan (scheduler start), mount WS
+  main.py            # create_app(), lifespan (redis client, bus, scheduler), mount WS
   core/config.py     # pydantic-settings Settings (all env vars)
   core/security.py   # argon2 hash/verify, JWT create/decode, deps (get_current_user)
   core/deps.py       # get_db, get_current_user, get_group_member, get_group_owner
+  core/redis_client.py  # process-cached Redis client (None = local mode, §3.2)
   db/session.py      # async engine/session
   db/base.py         # Declarative base, mixins (id, created_at, updated_at)
   models/*.py        # one module per aggregate; relationships explicit
@@ -207,7 +210,10 @@ app/
   api/*.py           # thin routers: parse/validate → call service → map errors
   services/*.py      # business logic, takes a DB session; the ONLY layer that
                      #   knows split/balance formulas
-  workers/scheduler.py  # APScheduler job: overdue scan (2.7)
+  ws/bus.py          # EventBus: LocalBus / RedisBus cross-replica fan-out (§3.2)
+  ws/user_groups.py  # WS-handshake group-list cache (fail-open, §3.2)
+  workers/scheduler.py  # APScheduler job: overdue scan (2.7), single-flight via lock
+  workers/lock.py    # single-flight Redis lock for the scheduler (§2.7)
 ```
 
 Rules:
@@ -221,6 +227,8 @@ Rules:
 
 - Endpoint `WS /ws?token=<access token>`. On success the server subscribes the socket to the user's group set (and adds a group dynamically when the user joins one mid-session).
 - Server→client messages: `{"type": "<event>", "group_id": ..., "data": {...}}`. `data` always contains everything the client needs to update UI without an extra REST call.
+
+**Event bus (multi-replica).** Fan-out goes through an event bus (`app/ws/bus.py`) rather than straight to the in-process registry: `LocalBus` when `REDIS_URL` is unset (exactly the pre-Redis behaviour) and `RedisBus` when it is — a PUBLISH to the single channel `easymoney:events`, consumed by **every** replica including the publisher (symmetric delivery: a publisher never touches its own registry directly, so one code path serves both modes). Envelope: one JSON per publish carrying the already-serialized wire message, so subscribers forward bytes without re-serializing. Mid-session join/leave are control messages on the same channel — every replica (re)subscribes **its own** sockets; a leaver's tabs stop receiving the group immediately (a deliberate fix of the pre-Redis leaver-tab leak). Delivery is **at-most-once** (Pub/Sub drops messages to absent subscribers); the backstop is the client's REST refetch on reconnect. On a PUBLISH failure the replica logs the error and delivers to its own registry (no event is silently lost in single-replica mode). The WS handshake reads the user's group set through the `easymoney:user_groups:<user_id>` cache (TTL `USER_GROUPS_CACHE_TTL_S`, invalidated on the same post-commit paths that change membership, fail-open to the DB query). The group-balance snapshot served by `GET /groups/{id}/balances` rides the `easymoney:snapshot:<group_id>` cache (TTL `SNAPSHOT_CACHE_TTL_S`, refreshed with the same wire dict that is pushed on every group event — exact invalidation, TTL as safety net). Both caches are display-only: a miss or a Redis error recomputes from the DB, so a stale/absent value can never make the API wrong in a way the client cannot repair.
 - Event catalogue (all push a fresh `group_balances` snapshot — per-user balance + pairwise pairs + suggested transfers — unless noted):
 
 | Type | data highlights |
@@ -294,7 +302,7 @@ Rules:
 
 ## 4. Environment & running
 
-See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `SMTP_ENABLED`, `EMAIL_REGISTER_CONFIRMATION`, `EMAIL_CHANGE_CONFIRMATION`, `PASSWORD_CHANGE_CONFIRMATION`, `CONFIRMATION_TOKEN_HOURS`, `EMAIL_CHANGE_REVERT_DAYS`, `REGISTRATION_OPEN`, `MAX_AVATAR_MB`, `DEBUG`, `DEBT_OVERDUE_DAYS`, `REMINDER_INTERVAL_DAYS`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `STORAGE_BACKEND`, `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `UPLOAD_DIR` (only when `STORAGE_BACKEND=local`), `CORS_ORIGINS`.
+See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `SMTP_ENABLED`, `EMAIL_REGISTER_CONFIRMATION`, `EMAIL_CHANGE_CONFIRMATION`, `PASSWORD_CHANGE_CONFIRMATION`, `CONFIRMATION_TOKEN_HOURS`, `EMAIL_CHANGE_REVERT_DAYS`, `REGISTRATION_OPEN`, `MAX_AVATAR_MB`, `DEBUG`, `DEBT_OVERDUE_DAYS`, `REMINDER_INTERVAL_DAYS`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `STORAGE_BACKEND`, `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `UPLOAD_DIR` (only when `STORAGE_BACKEND=local`), `CORS_ORIGINS`, `REDIS_URL` (empty = local mode: in-process bus, no caches, lock no-op — the pre-Redis behaviour), `SNAPSHOT_CACHE_TTL_S`, `USER_GROUPS_CACHE_TTL_S`, `SCHEDULER_LOCK_TTL_S`.
 
 Local dev without Docker (optional): `alembic upgrade head`, `uvicorn app.main:app --reload`, `npm run dev` (Vite proxies `/api`, `/ws` to `:8000`).
 
@@ -315,6 +323,7 @@ A change is done when:
 4. New WS event types require: backend emit + event-catalogue entry here + frontend handler.
 5. No money path uses floats (CI: `ruff` rule + grep guard in tests).
 6. **Account/admin tests pass.** `backend/tests/test_accounts.py` must cover: first-ever user becomes admin (and the migration backfills the lowest-id user when none exists); registration restriction (`REGISTRATION_OPEN=false` → 403 once a user exists, `GET /api/auth/status` reflects it); register-confirmation on/off (unverified until confirmed vs. verified immediately); email-change confirmation on/off (two mails — confirm to the new address, revert to the previous one — vs. immediate swap) plus the full revert (cancels a pending change, switches back after a confirmed one, 409s); token lifecycle (confirm marks used, resend revokes the previous pending token, expiry); SMTP kill switch (`SMTP_ENABLED=false` → no send, confirmations skipped); avatar set/clear; admin create/patch (no confirmation, last-admin guard). Frontend: theme manager, i18n preferred-language default, Avatar fallback, settings modal, register-form hiding.
+7. **Multi-replica tests pass.** `backend/tests/` must contain and keep green — all in-process against fakeredis (no real Redis needed): `test_redis_bus.py` (cross-replica delivery, symmetric publisher delivery, control messages, publish-failure fallback, envelope codec round-trip); `test_multi_instance_flow.py` (end-to-end: a REST write on replica A reaches a socket parked on replica B; join/leave control messages reach both; the leaver's tabs are unsubscribed); `test_scheduler_lock.py` (single-flight: exactly one of two replicas acquires; release only by owner; TTL expiry; fail-open on Redis error); `test_user_groups_cache.py` (hit/miss, invalidation, corrupt-value recovery); `test_snapshot_cache.py` (hit/miss, `refresh_snapshot_cache` on the real service path, money stays correct on the wire).
 
 ## 6. Requirements traceability
 
@@ -353,6 +362,7 @@ A change is done when:
 | 31 | Admin panel: first user is admin; manage users; statistics | §2.13 (`is_admin`, `GET/PATCH /admin/users`, `GET /admin/stats`) |
 | 32 | Disable SMTP entirely via env (no mail, no confirmations) | §2.13 (`SMTP_ENABLED` kill switch in `services/mail.py`) |
 | 33 | Password change with optional email confirmation (pending hash rides on the token, applied only on confirm) | §2.13 (`PASSWORD_CHANGE_CONFIRMATION`, `email_tokens.password_hash`, `POST /me/password/change`) |
+| 34 | Multi-replica backend behind a load balancer: cross-instance WS fan-out, short-TTL display caches, single-flight reminder scan — Redis is optional, local mode when unset | §2.7 (lock), §3.2 (bus + caches), §4 (`REDIS_URL` + TTLs), `app/ws/bus.py`, `app/ws/user_groups.py`, `app/core/redis_client.py`, `app/workers/lock.py` |
 
 ## 7. Style
 

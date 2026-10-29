@@ -66,3 +66,23 @@ def run_db():
         return asyncio.run(_main())
 
     return _run
+
+
+@pytest.fixture
+async def replicas():
+    """Two in-process 'replicas' sharing one ``fakeredis`` ``FakeServer``.
+
+    Each test gets a fresh, isolated server, so Pub/Sub state never leaks
+    between tests. Both bus consumer tasks run in the test's own event loop
+    (the fixture is async, so it shares it) and are torn down after the test.
+    """
+    from fakeredis import FakeServer
+
+    from tests import bus_util
+
+    server = FakeServer()
+    rs = await bus_util.make_redis_replicas(server)
+    try:
+        yield rs
+    finally:
+        await bus_util.close_replicas(rs)

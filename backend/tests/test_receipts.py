@@ -38,6 +38,7 @@ from app.services import expenses as expenses_service
 from app.services import groups as groups_service
 from app.services import storage as storage_service
 from app.ws import hook as ws_hook
+from app.ws.bus import LocalBus
 from app.ws.registry import ConnectionManager
 
 # Must stay in sync with conftest.TEST_DATABASE_URL.
@@ -416,9 +417,11 @@ class TestReceiptEvents:
                 group_id = group.id
 
             # Both members' tabs are connected and subscribed before the receipt
-            # operations (the manager is plugged in here, not by the app).
+            # operations (the manager and the local bus over it are plugged in
+            # here, not by the app — the same pairing the lifespan makes).
             manager = ConnectionManager()
             ws_hook.set_manager(manager)
+            ws_hook.set_bus(LocalBus(manager))
             try:
                 tab_a, tab_b = FakeSocket(), FakeSocket()
                 manager.connect(tab_a, 1)
@@ -481,5 +484,6 @@ class TestReceiptEvents:
                     assert events[1]["data"]["attachment"] is None
             finally:
                 ws_hook.set_manager(None)
+                ws_hook.set_bus(None)
 
         run_db(_scenario)

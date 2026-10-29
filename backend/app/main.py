@@ -30,6 +30,7 @@ from app.api import me as me_api
 from app.api import notifications as notifications_api
 from app.api import settlements as settlements_api
 from app.api import users as users_api
+from app.core import redis_client
 from app.core.config import get_settings
 from app.core.errors import (
     Conflict,
@@ -42,6 +43,7 @@ from app.core.errors import (
 from app.db.session import dispose_engine
 from app.services import storage as storage_service
 from app.workers import scheduler as scheduler_worker
+from app.ws import bus as ws_bus
 from app.ws import endpoint as ws_api
 from app.ws import hook as ws_hook
 from app.ws.registry import ConnectionManager
@@ -90,17 +92,32 @@ class _TokenRedactFilter(logging.Filter):
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # B8: the in-process WebSocket registry; services reach it through the
-    # post-commit hook (app.ws.hook). B9: the APScheduler runs the hourly
-    # overdue-debt reminder scan (app.workers.scheduler, §2.7). Storage
-    # backend is made ready (S3: the bucket is created, idempotently).
-    ws_hook.set_manager(ConnectionManager())
+    # post-commit hook (app.ws.hook). The cross-instance bus (app.ws.bus):
+    # LocalBus without REDIS_URL (exactly the pre-Redis behaviour), RedisBus
+    # with one (its consumer task applies events to this replica's registry).
+    # B9: the APScheduler runs the hourly overdue-debt reminder scan
+    # (app.workers.scheduler, §2.7), single-flight through the Redis lock.
+    # Storage backend is made ready (S3: the bucket is created, idempotently).
+    manager = ConnectionManager()
+    ws_hook.set_manager(manager)
+    redis = redis_client.get_redis()
+    bus: ws_bus.EventBus = (
+        ws_bus.LocalBus(manager) if redis is None else ws_bus.RedisBus(redis, manager)
+    )
+    await bus.start()
+    ws_hook.set_bus(bus)
     await storage_service.get_store().ready()
     scheduler = scheduler_worker.start_scheduler()
     try:
         yield
     finally:
         scheduler.shutdown(wait=False)
+        # Stop the bus consumer before anything else, so no event is applied
+        # while the process is going down.
+        await bus.close()
+        ws_hook.set_bus(None)
         ws_hook.set_manager(None)
+        await redis_client.dispose_redis()
         # Close the pooled DB connections on the live loop before the event
         # loop itself goes down (clean shutdown in production; the same path
         # keeps test clients from leaving the pool behind on a dead loop).
@@ -224,7 +241,16 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health", tags=["meta"])
     async def health() -> dict[str, str]:
-        return {"status": "ok"}
+        # Additive Redis probe: "off" = local mode (not configured),
+        # "on" = reachable, "error" = configured but not answering right now.
+        redis = redis_client.get_redis()
+        if redis is None:
+            return {"status": "ok", "redis": "off"}
+        try:
+            await redis.ping()
+        except Exception:
+            return {"status": "ok", "redis": "error"}
+        return {"status": "ok", "redis": "on"}
 
     # Domain errors raised by services map to the AGENTS.md §3.1 status codes.
     _status_for: dict[type[DomainError], int] = {

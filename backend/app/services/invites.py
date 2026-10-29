@@ -199,7 +199,7 @@ async def accept_invite(db: AsyncSession, user: User, token: str) -> Group:
     await db.commit()
     # The joiner's already-open tabs get the new group immediately: re-
     # subscribe them before the fan-out so they see the member.joined event.
-    ws_hook.resubscribe_user(user.id, group.id)
+    await ws_hook.resubscribe_user(user.id, group.id)
     await ws_hook.emit_group(db, group, "member.joined", payload)
     await ws_hook.emit_notifications(group.id, notifications)
     return group

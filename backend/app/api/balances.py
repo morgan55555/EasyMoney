@@ -1,9 +1,10 @@
 """Balance endpoints (AGENTS.md §2.2, §2.3, §2.12).
 
 ``GET /groups/{id}/balances`` — per-member balances, the pairwise view and
-the suggested transfers for one group (membership required).
+the suggested transfers for one group (membership required). Served through
+the snapshot cache (display reads only; fail-open, §3.2 multi-replica).
 ``GET /balances/all`` — the caller's balances across all groups, one row
-per currency, no conversion.
+per currency, no conversion (not cached: bounded and small).
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ from app.schemas.balances import (
     MemberBalanceOut,
     TransferOut,
 )
-from app.schemas.user import avatar_url
 from app.services import balances as balances_service
 from app.services.currency import format_money
 
@@ -41,20 +41,14 @@ async def get_group_balances(
     group: Group = Depends(get_group_member),
     db: AsyncSession = Depends(get_db),
 ) -> GroupBalancesOut:
-    snap = await balances_service.group_balance_snapshot(db, group)
+    # The wire dict (cache hit or fresh compute; money already formatted
+    # strings) maps 1:1 onto the response schema.
+    wire = await balances_service.load_balances_wire(db, group)
     return GroupBalancesOut(
-        currency=snap.currency,
-        balances=[
-            MemberBalanceOut(
-                user_id=b.user_id,
-                display_name=b.display_name,
-                balance=format_money(b.balance, snap.currency),
-                avatar_url=avatar_url(b.user_id, b.avatar_data),
-            )
-            for b in snap.balances
-        ],
-        pairs=[_transfer_out(t, snap.currency) for t in snap.pairs],
-        transfers=[_transfer_out(t, snap.currency) for t in snap.transfers],
+        currency=wire["currency"],
+        balances=[MemberBalanceOut(**row) for row in wire["balances"]],
+        pairs=[TransferOut(**row) for row in wire["pairs"]],
+        transfers=[TransferOut(**row) for row in wire["transfers"]],
     )
 
 

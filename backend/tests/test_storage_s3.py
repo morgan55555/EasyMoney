@@ -39,6 +39,7 @@ from app.services import expenses as expenses_service
 from app.services import groups as groups_service
 from app.services import storage as storage_service
 from app.ws import hook as ws_hook
+from app.ws.bus import LocalBus
 from app.ws.registry import ConnectionManager
 
 # Must stay in sync with conftest.TEST_DATABASE_URL.
@@ -322,6 +323,7 @@ class TestLifecycle:
 
             manager = ConnectionManager()
             ws_hook.set_manager(manager)
+            ws_hook.set_bus(LocalBus(manager))
             try:
                 tab = FakeSocket()
                 manager.connect(tab, 1)
@@ -373,5 +375,6 @@ class TestLifecycle:
                 assert data["group_balances"]["currency"] == "USD"
             finally:
                 ws_hook.set_manager(None)
+                ws_hook.set_bus(None)
 
         run_db(_scenario)
