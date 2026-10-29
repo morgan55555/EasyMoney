@@ -209,13 +209,8 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           <Field
             label={t('settings.emailChange')}
             trailing={
-              <Button
-                onClick={submitEmail}
-                busy={changeEmail.isPending}
-                disabled={!newEmail.trim()}
-                className="w-40"
-              >
-                {t('settings.emailChange')}
+              <Button onClick={submitEmail} busy={changeEmail.isPending} disabled={!newEmail.trim()}>
+                {t('settings.save')}
               </Button>
             }
           >
@@ -245,13 +240,8 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             label={t('settings.passwordChange')}
             hint={t('auth.passwordHint')}
             trailing={
-              <Button
-                onClick={submitPassword}
-                busy={changePassword.isPending}
-                disabled={newPassword.length < 8}
-                className="w-40"
-              >
-                {t('settings.passwordChange')}
+              <Button onClick={submitPassword} busy={changePassword.isPending} disabled={newPassword.length < 8}>
+                {t('settings.save')}
               </Button>
             }
           >

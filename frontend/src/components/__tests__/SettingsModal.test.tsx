@@ -16,12 +16,13 @@ import { SettingsModal } from '../SettingsModal'
 import {
   render,
   typeInput,
+  click,
   clickByText,
   selectValue,
   labeledInput,
+  labeledButton,
   labeledSelect,
   buttonsWithText,
-  buttonDisabled,
   hasText,
   flush,
   stubFetch,
@@ -82,7 +83,7 @@ describe('SettingsModal', () => {
     typeInput(labeledInput(r.body, 'Change email'), 'new@test.local')
     const stub = stubFetch({ '/api/me/email/change': { status: 'confirmation_sent' } })
     try {
-      clickByText(r.body, 'Change email')
+      click(labeledButton(r.body, 'Change email'))
       await flush()
       expect(stub.calls.some((c) => c.url.includes('/api/me/email/change'))).toBe(true)
       expect(hasText(r.body, 'Two emails were sent:')).toBe(true)
@@ -96,7 +97,7 @@ describe('SettingsModal', () => {
     typeInput(labeledInput(r.body, 'Change email'), 'new@test.local')
     const stub = stubFetch({ '/api/me/email/change': { status: 'changed' } })
     try {
-      clickByText(r.body, 'Change email')
+      click(labeledButton(r.body, 'Change email'))
       await flush()
       expect(hasText(r.body, 'Email changed.')).toBe(true)
     } finally {
@@ -108,12 +109,12 @@ describe('SettingsModal', () => {
     r = render(createElement(SettingsModal, { open: true, onClose: () => undefined }), { seed, theme: true })
     const field = labeledInput(r.body, 'Change password')
     typeInput(field, 'short')
-    expect(buttonDisabled(r.body, 'Change password')).toBe(true)
+    expect(labeledButton(r.body, 'Change password').disabled).toBe(true)
     typeInput(field, 'longenough1')
-    expect(buttonDisabled(r.body, 'Change password')).toBe(false)
+    expect(labeledButton(r.body, 'Change password').disabled).toBe(false)
     const stub = stubFetch({ '/api/me/password/change': { status: 'changed' } })
     try {
-      clickByText(r.body, 'Change password')
+      click(labeledButton(r.body, 'Change password'))
       await flush()
       expect(hasText(r.body, 'Password changed.')).toBe(true)
     } finally {

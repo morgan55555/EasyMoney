@@ -195,6 +195,19 @@ export function labeledInput(root: ParentNode, label: string): HTMLInputElement 
   return input
 }
 
+/**
+ * Find the `<button>` inside the `<label>` whose first text span is `label`.
+ * Used when several fields share the same button label (e.g. three "Save"
+ * buttons) and the one next to a specific field must be targeted.
+ */
+export function labeledButton(root: ParentNode, label: string): HTMLButtonElement {
+  const labels = Array.from(root.querySelectorAll('label'))
+  const hit = labels.find((l) => (l.querySelector('span')?.textContent ?? '').trim() === label)
+  const btn = hit?.querySelector('button') as HTMLButtonElement | null
+  if (!btn) throw new Error(`labeledButton: no button under label "${label}"`)
+  return btn
+}
+
 /** All button/link elements whose text contains `text`. */
 export function buttonsWithText(root: ParentNode, text: string): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>('button, a, [role="button"]')).filter((b) =>
