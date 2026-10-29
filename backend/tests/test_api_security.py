@@ -55,6 +55,25 @@ def _craft_token(sub: str) -> str:
     return jwt.encode(payload, settings.jwt_secret, algorithm=security.ALGORITHM)
 
 
+def _craft_token_wrong_sig(sub: str) -> str:
+    """Well-formed payload but signed with a secret the server does not know."""
+    payload = {"sub": sub, "type": "access", "exp": int(datetime.now(UTC).timestamp()) + 600}
+    return jwt.encode(payload, "wrong-secret-long-enough-for-hs256", algorithm=security.ALGORITHM)
+
+
+def _craft_token_expired(sub: str) -> str:
+    """Signature-valid but with an ``exp`` already in the past."""
+    settings = get_settings()
+    payload = {"sub": sub, "type": "access", "exp": int(datetime.now(UTC).timestamp()) - 3600}
+    return jwt.encode(payload, settings.jwt_secret, algorithm=security.ALGORITHM)
+
+
+def _craft_token_alg_none(sub: str) -> str:
+    """Unsigned token with ``alg: none`` — must be rejected (algorithm pinned)."""
+    payload = {"sub": sub, "type": "access", "exp": int(datetime.now(UTC).timestamp()) + 600}
+    return jwt.encode(payload, key="", algorithm="none")
+
+
 def _register_user_1(run_db) -> str:
     """Truncate the test DB, create user 1 with group 1, return an access token.
 
@@ -97,6 +116,24 @@ class TestCraftedTokens:
         response = api_client.get("/api/me", headers=_auth(_craft_token("100000000000000000000")))
         assert response.status_code == 401
         assert response.json()["detail"] == "Invalid token"
+
+    def test_wrong_signature_is_401(self, api_client) -> None:
+        # Correct payload shape, signed with an unknown secret.
+        response = api_client.get("/api/me", headers=_auth(_craft_token_wrong_sig("1")))
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Invalid or expired token"
+
+    def test_expired_token_is_401(self, api_client) -> None:
+        response = api_client.get("/api/me", headers=_auth(_craft_token_expired("1")))
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Invalid or expired token"
+
+    def test_alg_none_token_is_401(self, api_client) -> None:
+        # The decode pins algorithms=["HS256"], so an unsigned ``alg: none``
+        # token is an algorithm error, never an accepted credential.
+        response = api_client.get("/api/me", headers=_auth(_craft_token_alg_none("1")))
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Invalid or expired token"
 
 
 class TestOutOfRangeIds:

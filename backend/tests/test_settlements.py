@@ -13,7 +13,9 @@ Covered:
     including the two-concurrent-confirms race (exactly one wins);
   * pending settlements have no balance effect, confirmed ones do (Σ = 0);
   * feed rows + notifications to exactly the two parties involved;
-  * closed groups still accept settlements (§2.9).
+  * closed groups still accept settlements (§2.9);
+  * deleting the expense behind a debt while a proposal is pending: the
+    confirmation still applies in full and creates a reverse debt (§2.4 note).
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ from app.models.settlement import Settlement
 from app.models.user import User
 from app.schemas.settlements import SettlementCreate
 from app.services import balances as balances_service
+from app.services import expenses as expenses_service
 from app.services import settlements as settlements_service
 
 ALICE, BOB, CAROL = 1, 2, 3
@@ -298,5 +301,46 @@ def test_two_confirms_one_wins(run_db):
     run_db(_race_scenario)
 
 
+async def _reverse_debt_scenario(factory: async_sessionmaker) -> None:
+    """§2.4 note: no re-validation at confirmation — if the debt disappears
+    before the recipient confirms, the money still really moved, so the full
+    amount applies and the sender ends up with a claim (reverse debt)."""
+    group, users = await _setup_group(factory)
+    async with factory() as db:
+        s = await settlements_service.create_settlement(
+            db, group, users[BOB], SettlementCreate(to_user_id=ALICE, amount=Decimal("33.33"))
+        )
+        sid = s.id
+    # Alice deletes the only expense while bob's proposal is still pending:
+    # every balance (computed on read) drops to zero.
+    async with factory() as db:
+        expense = await expenses_service.get_expense(db, 1)
+        await expenses_service.delete_expense(db, expense, users[ALICE])
+        mid = await balances_service.group_balances(db, group)
+        assert mid == {
+            ALICE: Decimal("0.00"),
+            BOB: Decimal("0.00"),
+            CAROL: Decimal("0.00"),
+        }
+    # Alice confirms the still-pending settlement: bob's 33.33 applies in
+    # full, flipping him from debtor to creditor of alice.
+    async with factory() as db:
+        pending = await db.get(Settlement, sid)
+        assert pending is not None
+        confirmed = await settlements_service.confirm_settlement(db, pending, users[ALICE])
+        assert confirmed.state == "confirmed"
+        after = await balances_service.group_balances(db, group)
+        assert after == {
+            ALICE: Decimal("-33.33"),
+            BOB: Decimal("33.33"),
+            CAROL: Decimal("0.00"),
+        }
+        assert sum(after.values()) == Decimal(0)
+
+
 def test_feed_and_notifications(run_db):
     run_db(_feed_notifications_scenario)
+
+
+def test_reverse_debt_after_expense_deletion(run_db):
+    run_db(_reverse_debt_scenario)
