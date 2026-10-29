@@ -1,33 +1,55 @@
 /**
  * /invite/:token accept page (F3, AGENTS.md §2.10).
  *
- * Accepting requires an account, so unauthenticated visitors are offered the
- * register-then-join flow: auth lands back here (?next=/invite/:token) and
- * the Join button posts the token. Link invites are reusable; email invites
- * are bound to the addressed email (the server validates).
+ * Accepting requires an account. Whether the visitor is signed in is detected
+ * with the same self-healing /me query the rest of the app uses (see
+ * `useMe`): a lapsed access token is renewed through the 401→refresh dance
+ * before we decide they are signed out, so a logged-in user is never bounced
+ * to the login/register prompt. Only a genuinely signed-out visitor (no valid
+ * session) sees the register-then-join flow; auth lands back here
+ * (?next=/invite/:token) and the Join button posts the token. Link invites are
+ * reusable; email invites are bound to the addressed email (the server
+ * validates).
  *
  * The language switcher is here too (top-right) — the page is reachable
  * without authentication.
  */
 
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
-import { ApiError, getTokens } from '../api/client'
-import { invitesApi } from '../api/endpoints'
+import { ApiError, getTokens, hasSession } from '../api/client'
+import { invitesApi, meApi } from '../api/endpoints'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { Button, Card, ErrorText, Spinner } from '../components/ui'
 import { useI18n } from '../i18n'
+import { keys } from '../query/queries'
 
 export function InvitePage() {
   const { token = '' } = useParams()
   const navigate = useNavigate()
   const { t } = useI18n()
+  // "Is there any session material at all?" — access and/or refresh token.
+  const session = hasSession()
+  // `me` is the source of truth for "is this visitor signed in?": it heals a
+  // lapsed access token via the 401→refresh dance before resolving. It only
+  // runs when there is something to heal or confirm — an anonymous visitor
+  // has no token, is signed out by definition, and gets the register/login
+  // prompt immediately (no network round-trip, no spinner). `retry: false`
+  // keeps a dead refresh (401 twice) from retrying with backoff: the answer
+  // is known after one round-trip.
+  const me = useQuery({ queryKey: keys.me, queryFn: () => meApi.get(), enabled: session, retry: false })
   const [state, setState] = useState<'idle' | 'joining' | 'done' | 'error'>('idle')
   const [error, setError] = useState('')
   const [, setGroupId] = useState<number | null>(null)
 
-  const authenticated = !!getTokens()?.access
+  // We only show the Join UI once the session is confirmed. If /me errored but
+  // tokens are still present (a transient network blip), we stay optimistic
+  // and show Join — clicking it re-validates — rather than logging a signed-in
+  // user out.
+  const authenticated = session && (!!me.data || (me.isError && !!getTokens()))
+  const checking = session && me.isPending
 
   const join = async () => {
     setState('joining')
@@ -56,7 +78,9 @@ export function InvitePage() {
           {authenticated ? t('invite.textAuthed') : ''}
         </p>
 
-        {authenticated ? (
+        {checking ? (
+          <Spinner label={t('invite.checking')} />
+        ) : authenticated ? (
           <>
             {state === 'joining' ? (
               <Spinner label={t('invite.joining')} />
@@ -84,7 +108,7 @@ export function InvitePage() {
         )}
 
         <p className="text-xs text-gray-400 dark:text-gray-500">
-          {authenticated && state !== 'done' && state !== 'joining' ? (
+          {authenticated && !checking && state !== 'done' && state !== 'joining' ? (
             <Link to="/" className="hover:underline">
               {t('overview.back')}
             </Link>

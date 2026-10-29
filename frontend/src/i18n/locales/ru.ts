@@ -115,6 +115,7 @@ export const ru: Dict = {
   'invite.title': 'Присоединиться к группе',
   'invite.text': 'Вас пригласили присоединиться к группе.',
   'invite.textAuthed': ' Нажмите ниже, чтобы принять приглашение.',
+  'invite.checking': 'Проверяем ваш аккаунт…',
   'invite.joining': 'Присоединение…',
   'invite.joined': 'Готово! Переходим в группу…',
   'invite.join': 'Присоединиться',

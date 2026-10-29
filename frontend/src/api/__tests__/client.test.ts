@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { apiFetch, clearTokens, getTokens, setTokens } from '../client'
+import { apiFetch, clearTokens, getTokens, refreshTokens, setTokens } from '../client'
 
 // A minimal Response stand-in: apiFetch only reads ok, status and json().
 function fakeResponse(status: number, body: unknown = {}): Response {
@@ -105,5 +105,50 @@ describe('apiFetch token handling', () => {
     expect(refreshHits).toHaveLength(0)
     // Tokens are preserved (a login 401 is a bad-password, not an expiry).
     expect(getTokens()?.access).toBe('a')
+  })
+
+  it('rotates the session from the stored refresh token even when the access token is absent', async () => {
+    // Only the 7-day refresh survives: the 15-min access lapsed and was dropped,
+    // but a signed-in user must still be recoverable from the refresh token.
+    localStorage.setItem('easymoney.refresh', 'ref')
+    const fetchMock = vi.mocked(fetch)
+    let refreshHits = 0
+    fetchMock.mockImplementation(async (input) => {
+      refreshHits++
+      expect(String(input)).toContain('/api/auth/refresh')
+      return fakeResponse(200, NEW_TOKENS)
+    })
+
+    await expect(refreshTokens()).resolves.toBe(true)
+    expect(refreshHits).toBe(1)
+    expect(getTokens()?.access).toBe('new-access')
+    expect(getTokens()?.refresh).toBe('new-refresh')
+  })
+
+  it('does not log a signed-in user out when a concurrent tab rotated the session mid-refresh', async () => {
+    // We send the request with a stale access token; while our refresh is in
+    // flight a second tab rotates the shared session (revoking our jti, so our
+    // refresh 401s) and writes a fresh access token to storage. We must adopt
+    // the fresh token and retry — not clearTokens() a still-valid session.
+    setTokens({ access: 'stale', refresh: 'ref' })
+    const fetchMock = vi.mocked(fetch)
+    let originalCalls = 0
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/api/auth/refresh')) {
+        // Simulate the concurrent tab's successful rotation.
+        localStorage.setItem('easymoney.access', 'rotated')
+        return fakeResponse(401)
+      }
+      originalCalls++
+      if (originalCalls === 1) return fakeResponse(401)
+      return fakeResponse(200, { ok: 'retried' })
+    })
+
+    const data = await apiFetch<{ ok: string }>('/api/groups')
+    expect(data).toEqual({ ok: 'retried' })
+    // The session survived: the rotated token is kept and used for the retry.
+    expect(getTokens()?.access).toBe('rotated')
+    expect(originalCalls).toBe(2)
   })
 })

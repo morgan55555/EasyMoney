@@ -28,6 +28,16 @@ export function getTokens(): StoredTokens | null {
   return { access, refresh: refresh ?? '' }
 }
 
+/**
+ * True when there is any session material at all — the access token, the
+ * refresh token, or both. The access token may be lapsed/absent while a
+ * valid refresh still is, so "signed in?" must not be decided by the access
+ * token alone.
+ */
+export function hasSession(): boolean {
+  return !!localStorage.getItem(ACCESS_KEY) || !!localStorage.getItem(REFRESH_KEY)
+}
+
 export function setTokens(tokens: StoredTokens): void {
   localStorage.setItem(ACCESS_KEY, tokens.access)
   if (tokens.refresh) localStorage.setItem(REFRESH_KEY, tokens.refresh)
@@ -59,16 +69,24 @@ async function rawFetch(path: string, init: RequestInit = {}, withAuth: boolean)
 
 let refreshInFlight: Promise<boolean> | null = null
 
-/** Rotate the refresh token (single-flight). Resolves false when no session. */
+/**
+ * Rotate the refresh token (single-flight). Resolves false when there is no
+ * refresh token to rotate with.
+ *
+ * The refresh token is read straight from storage rather than via
+ * {@link getTokens}: the access token may be absent or lapsed while a valid
+ * refresh still is, and we must still be able to rotate it (that is the whole
+ * point of a 7-day refresh outliving a 15-minute access).
+ */
 export function refreshTokens(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
-      const tokens = getTokens()
-      if (!tokens?.refresh) return false
+      const refresh = localStorage.getItem(REFRESH_KEY)
+      if (!refresh) return false
       try {
         const res = await rawFetch(
           '/api/auth/refresh',
-          { method: 'POST', body: JSON.stringify({ refresh_token: tokens.refresh }) },
+          { method: 'POST', body: JSON.stringify({ refresh_token: refresh }) },
           false,
         )
         if (!res.ok) return false
@@ -115,10 +133,17 @@ export interface ApiFetchOptions {
  */
 export async function apiFetch<T>(path: string, init: RequestInit = {}, opts: ApiFetchOptions = {}): Promise<T> {
   const withAuth = !opts.isAuthCall
+  const accessAtSend = getTokens()?.access ?? null
   let res = await rawFetch(path, init, withAuth)
   if (res.status === 401 && withAuth) {
     const refreshed = await refreshTokens()
-    if (refreshed) {
+    // A concurrent tab may have rotated the shared session while we were
+    // refreshing: its refresh succeeded (revoking the jti we just tried) so
+    // ours fails, but storage now holds a fresh, valid access token. In that
+    // case the session is still alive — adopt the rotated token and retry
+    // rather than logging a signed-in user out.
+    const rotated = !refreshed && (getTokens()?.access ?? null) !== accessAtSend
+    if (refreshed || rotated) {
       res = await rawFetch(path, init, withAuth)
     } else {
       clearTokens()

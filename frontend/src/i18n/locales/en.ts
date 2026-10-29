@@ -115,6 +115,7 @@ export const en: Dict = {
   'invite.title': 'Join a group',
   'invite.text': "You've been invited to join a group.",
   'invite.textAuthed': ' Click below to accept the invitation.',
+  'invite.checking': 'Checking your account…',
   'invite.joining': 'Joining…',
   'invite.joined': 'Joined! Taking you to the group…',
   'invite.join': 'Join group',

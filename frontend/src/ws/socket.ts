@@ -27,6 +27,8 @@ class SocketClient {
   private backoff = BASE_BACKOFF_MS
   private stopped = true
   private hasConnectedOnce = false
+  /** Access token the current socket attempt was opened with (for 4401 handling). */
+  private lastToken: string | null = null
   private messageListeners = new Set<MessageListener>()
   private statusListeners = new Set<StatusListener>()
 
@@ -93,6 +95,7 @@ class SocketClient {
       this.stopped = true
       return
     }
+    this.lastToken = token
     this.setStatus(this.hasConnectedOnce ? 'reconnecting' : 'connecting')
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const url = `${proto}://${window.location.host}/ws?token=${encodeURIComponent(token)}`
@@ -138,14 +141,21 @@ class SocketClient {
 
   private async handleAuthFailure(): Promise<void> {
     const refreshed = await refreshTokens()
-    if (!refreshed) {
+    // A concurrent tab may have rotated the shared session while we were
+    // refreshing (its refresh revoked the jti we used, so ours fails, but
+    // storage now holds a fresh valid token). Reconnect with it instead of
+    // logging a signed-in user out.
+    const current = getTokens()?.access
+    const rotated = !refreshed && !!current && current !== this.lastToken
+    if (!refreshed && !rotated) {
       clearTokens()
       this.stopped = true
       this.setStatus('idle')
       window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
       return
     }
-    // Fresh access token: reconnect immediately without waiting for backoff.
+    // Fresh access token (ours or a concurrent tab's): reconnect immediately
+    // without waiting for backoff.
     this.openSocket()
   }
 
