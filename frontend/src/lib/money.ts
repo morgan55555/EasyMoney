@@ -78,10 +78,25 @@ export function formatSigned(value: string | number, currency: string, locale?: 
   return `+${formatMoney(s, currency, locale)}`
 }
 
-/** Parse an API money string to integer minor units (display/preview math only). */
-export function toMinorUnits(value: string, currency: string): number {
+/** A plain decimal literal: optional '-', digits, optional '.' + digits. */
+const PLAIN_DECIMAL = /^-?\d+(\.\d+)?$/
+
+/** True when the string is a plain decimal literal (the money format the API uses). */
+export function isPlainDecimal(value: string): boolean {
+  return PLAIN_DECIMAL.test(value.trim())
+}
+
+/**
+ * Parse an API money string to integer minor units (display/preview math only).
+ *
+ * Returns `null` when the string is not a plain decimal literal (e.g. "1e2",
+ * "1.5.2"): the API never sends such strings, and user input containing them
+ * must be rejected, not silently truncated at the first non-digit.
+ */
+export function toMinorUnits(value: string, currency: string): number | null {
   const digits = decimalDigits(currency)
   const s = value.trim()
+  if (!PLAIN_DECIMAL.test(s)) return null
   const negative = s.startsWith('-')
   const body = negative ? s.slice(1) : s
   const [intPart, decPart = ''] = body.split('.')

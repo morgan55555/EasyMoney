@@ -85,6 +85,20 @@ describe('toMinorUnits / fromMinorUnits round-trip', () => {
   })
 
   it.each([
+    ['1e2', 'USD'],
+    ['1.5e-1', 'EUR'],
+    ['1e-2', 'JPY'],
+    ['1.2.3', 'USD'],
+    ['12abc', 'USD'],
+    ['', 'USD'],
+    ['.', 'USD'],
+    ['-', 'USD'],
+    ['+1.00', 'USD'],
+  ])('toMinorUnits(%s, %s) = null for non-plain-decimal input', (value, currency) => {
+    expect(toMinorUnits(value, currency)).toBeNull()
+  })
+
+  it.each([
     [3334, 'EUR', '33.34'],
     [1000, 'JPY', '1000'],
     [1234567, 'KWD', '1234.567'],
@@ -102,7 +116,9 @@ describe('toMinorUnits / fromMinorUnits round-trip', () => {
       ['0.01', 'USD'],
     ]
     for (const [value, currency] of cases) {
-      expect(fromMinorUnits(toMinorUnits(value, currency), currency)).toBe(value)
+      const minor = toMinorUnits(value, currency)
+      if (minor === null) throw new Error(`unexpected null for ${value}`)
+      expect(fromMinorUnits(minor, currency)).toBe(value)
     }
   })
 })

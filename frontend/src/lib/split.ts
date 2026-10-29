@@ -6,7 +6,7 @@
  * writer of the stored shares — this preview is advisory only.
  */
 
-import { decimalDigits, fromMinorUnits, toMinorUnits } from './money'
+import { decimalDigits, fromMinorUnits, isPlainDecimal, toMinorUnits } from './money'
 
 export interface SplitPreviewInput {
   amount: string
@@ -32,9 +32,10 @@ function decimalPlaces(s: string): number {
 }
 
 /** Weights are scale-free; parse at 6 fixed decimals for the ratio math. */
-function weightToMinor(w: string): number {
+function weightToMinor(w: string): number | null {
   const t = w.trim()
   if (t === '') return 1_000_000
+  if (!isPlainDecimal(t)) return null
   const negative = t.startsWith('-')
   const body = negative ? t.slice(1) : t
   const [intPart, decPart = ''] = body.split('.')
@@ -47,11 +48,14 @@ export function previewSplit(input: SplitPreviewInput): SplitPreview {
   const { amount, currency, method, participants } = input
   const digits = decimalDigits(currency)
   const t = amount.trim()
-  if (t === '' || Number.isNaN(Number(t))) return { error: 'Enter an amount.' }
+  if (t === '') return { error: 'Enter an amount.' }
   if (decimalPlaces(t) > digits) {
     return { error: `${currency} has ${digits} decimal place(s); the amount has too many.` }
   }
+  // Strict parse: exponent notation ("1e2") and other non-plain-decimal input
+  // is rejected here, mirroring the server's 422, instead of being truncated.
   const a = toMinorUnits(t, currency)
+  if (a === null) return { error: 'Enter an amount.' }
   if (a <= 0) return { error: 'Enter an amount greater than zero.' }
   if (participants.length === 0) return { error: 'Pick at least one participant.' }
 
@@ -70,10 +74,11 @@ export function previewSplit(input: SplitPreviewInput): SplitPreview {
   if (method === 'weighted') {
     // Largest-remainder: floor each raw share, then the leftover units go to
     // the largest fractional parts, ties broken by participant order.
-    const weights = participants.map((p) => weightToMinor(p.weight ?? '1'))
-    if (weights.some((w) => w <= 0 || Number.isNaN(w))) {
+    const weightValues = participants.map((p) => weightToMinor(p.weight ?? '1'))
+    if (weightValues.some((w) => w === null || w <= 0)) {
       return { error: 'Weights must be positive numbers.' }
     }
+    const weights = weightValues.map((w) => w as number)
     const totalWeight = weights.reduce((sum, w) => sum + w, 0)
     const rows = participants.map((p, i) => {
       const raw = (a * weights[i]) / totalWeight
@@ -107,8 +112,10 @@ export function sumExactShares(
   let total = 0
   for (const s of shares) {
     const t = (s.amount ?? '').trim()
-    if (t === '' || Number.isNaN(Number(t))) return null
-    total += toMinorUnits(t, currency)
+    if (t === '') return null
+    const minor = toMinorUnits(t, currency)
+    if (minor === null) return null
+    total += minor
   }
   return fromMinorUnits(total, currency)
 }

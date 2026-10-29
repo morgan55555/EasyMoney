@@ -4,7 +4,7 @@ import { toMinorUnits } from '../money'
 import { previewSplit, sumExactShares } from '../split'
 
 function sumMinor(shares: Array<{ share: string }>, currency: string): number {
-  return shares.reduce((acc, s) => acc + toMinorUnits(s.share, currency), 0)
+  return shares.reduce((acc, s) => acc + (toMinorUnits(s.share, currency) ?? 0), 0)
 }
 
 describe('previewSplit — equal', () => {
@@ -213,6 +213,26 @@ describe('previewSplit — validation', () => {
     })
     expect(res).toEqual({ error: 'Weights must be positive numbers.' })
   })
+
+  it('rejects exponent-notation amounts instead of previewing a truncated value', () => {
+    // "1e2" used to preview as 0.01 (parseInt stops at 'e') while the server
+    // reads it as 100 — the preview must reject instead (F4-1).
+    const res = previewSplit({ amount: '1e2', currency: 'USD', method: 'equal', participants: [{ user_id: 1 }] })
+    expect(res).toEqual({ error: 'Enter an amount.' })
+  })
+
+  it('rejects exponent-notation weights', () => {
+    const res = previewSplit({
+      amount: '10.00',
+      currency: 'EUR',
+      method: 'weighted',
+      participants: [
+        { user_id: 1, weight: '1e3' },
+        { user_id: 2, weight: '1' },
+      ],
+    })
+    expect(res).toEqual({ error: 'Weights must be positive numbers.' })
+  })
 })
 
 describe('sumExactShares', () => {
@@ -222,5 +242,9 @@ describe('sumExactShares', () => {
 
   it('returns null when an input is missing or blank', () => {
     expect(sumExactShares([{ user_id: 1, amount: '10.00' }, { user_id: 2, amount: '' }], 'EUR')).toBeNull()
+  })
+
+  it('returns null for non-plain-decimal input (e.g. exponent notation)', () => {
+    expect(sumExactShares([{ user_id: 1, amount: '10.00' }, { user_id: 2, amount: '1e2' }], 'USD')).toBeNull()
   })
 })

@@ -80,7 +80,7 @@ describe('BalancesPanel', () => {
   it('the rendered member balances sum to zero (invariant 1 holds on the wire)', () => {
     const balances = ['-50.00', '30.00', '20.00']
     // Same data as above; verify the wire values the panel would render net out.
-    expect(balances.reduce((s, b) => s + toMinorUnits(b, 'EUR'), 0)).toBe(0)
+    expect(balances.reduce((s, b) => s + (toMinorUnits(b, 'EUR') ?? 0), 0)).toBe(0)
     r = render(
       createElement(BalancesPanel, { groupId: GROUP }),
       {
