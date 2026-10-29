@@ -301,7 +301,7 @@ def _s11_setup(client: TestClient) -> tuple[dict, dict, dict, int, int]:
     response = client.post(
         f"/api/expenses/{expense_id}/receipt",
         files={"file": ("r.png", b"\x89PNG\r\n\x1a\nfake-bytes", "image/png")},
-        headers=hb,
+        headers=ha,
     )
     assert response.status_code == 201, response.text
     attachment_id = response.json()["id"]
@@ -323,6 +323,14 @@ def test_s11_non_member_and_non_owner_access_control(run_db, sec_client) -> None
     # Bob is a member but not the owner: no close/reopen.
     assert client.post("/api/groups/1/close", headers=hb).status_code == 403
     assert client.post("/api/groups/1/reopen", headers=hb).status_code == 403
+    # ...and no receipt management on the owner's expense (§3.5 follows §2.5).
+    bob_upload = client.post(
+        "/api/expenses/1/receipt",
+        files={"file": ("r.png", b"\x89PNG\r\n\x1a\nfake-bytes", "image/png")},
+        headers=hb,
+    )
+    assert bob_upload.status_code == 403
+    assert client.delete("/api/expenses/1/receipt", headers=hb).status_code == 403
     # Sanity: the owner can still close.
     assert client.post("/api/groups/1/close", headers=ha).status_code == 200
 

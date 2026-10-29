@@ -154,7 +154,7 @@ export function ExpenseList({ groupId }: { groupId: number }) {
                     its buttons, so centering would sink the Edit/Delete icons a half-row.
                     Top-aligning keeps every action on one visual row (no reflow on error). */}
                 <div className="flex flex-wrap items-start justify-between gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
-                  <ReceiptUpload expense={e} groupId={groupId} />
+                  <ReceiptUpload expense={e} groupId={groupId} canManage={canManage(e)} />
                   <div className="flex gap-2">
                     <IconButton
                       title={t('expenses.edit')}

@@ -80,11 +80,13 @@ async def delete_expense(
 async def upload_receipt(
     file: UploadFile = File(...),
     expense: Expense = Depends(get_expense_member),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AttachmentOut:
+    # Only the expense creator or the group owner may manage receipts (§3.5).
     data = await file.read()
     attachment = await expenses_service.upload_receipt(
-        db, expense, file.filename or "receipt", file.content_type or "", data
+        db, expense, user, file.filename or "receipt", file.content_type or "", data
     )
     return build_attachment_out(attachment)
 
@@ -92,9 +94,10 @@ async def upload_receipt(
 @router.delete("/expenses/{expense_id}/receipt", status_code=204)
 async def delete_receipt(
     expense: Expense = Depends(get_expense_member),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    await expenses_service.delete_receipt(db, expense)
+    await expenses_service.delete_receipt(db, expense, user)
 
 
 @router.get("/attachments/{attachment_id}")

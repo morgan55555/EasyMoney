@@ -308,7 +308,9 @@ async def _close_blocks_writes_and_reopen_restores(factory: async_sessionmaker) 
                 await expenses_service.create_expense(db, group, alice, _expense_data())
             expense = await expenses_service.get_expense(db, 1)
             with pytest.raises(Conflict):
-                await expenses_service.upload_receipt(db, expense, "r.png", "image/png", b"x")
+                await expenses_service.upload_receipt(
+                    db, expense, alice, "r.png", "image/png", b"x"
+                )
         # Reopen restores writes and sends no mail (§2.9).
         async with factory() as db:
             group = await db.get(Group, GROUP_ID)

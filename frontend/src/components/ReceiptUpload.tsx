@@ -4,6 +4,9 @@
  * headers). Viewing opens a modal fed by a single object URL, created once per
  * view and revoked when the modal closes (and on unmount) so URLs never leak.
  * Receipts are never inlined in the list — only icon+text buttons.
+ * Attaching/replacing/removing is the creator-or-owner privilege (§3.5,
+ * mirrored server-side with 403); `canManage` disables those buttons while
+ * viewing stays available to every group member.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -20,7 +23,16 @@ export const ACCEPT = 'image/jpeg,image/png,image/gif,image/webp,application/pdf
 
 type ViewKind = 'image' | 'document'
 
-export function ReceiptUpload({ expense, groupId }: { expense: ExpenseOut; groupId: number | null }) {
+export function ReceiptUpload({
+  expense,
+  groupId,
+  canManage = true,
+}: {
+  expense: ExpenseOut
+  groupId: number | null
+  /** Creator or group owner (§3.5); false disables attach/replace/remove. */
+  canManage?: boolean
+}) {
   const upload = useUploadReceipt(groupId, expense.id)
   const remove = useDeleteReceipt(groupId, expense.id)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -102,17 +114,32 @@ export function ReceiptUpload({ expense, groupId }: { expense: ExpenseOut; group
               <IconEye />
               {viewLabel}
             </Button>
-            <Button variant="secondary" busy={upload.isPending} onClick={() => inputRef.current?.click()}>
+            <Button
+              variant="secondary"
+              busy={upload.isPending}
+              disabled={!canManage}
+              onClick={() => inputRef.current?.click()}
+            >
               <IconUpload />
               {t('receipt.replace')}
             </Button>
-            <Button variant="secondary" busy={remove.isPending} onClick={() => setConfirmRemove(true)}>
+            <Button
+              variant="secondary"
+              busy={remove.isPending}
+              disabled={!canManage}
+              onClick={() => setConfirmRemove(true)}
+            >
               <IconTrash />
               {t('receipt.remove')}
             </Button>
           </>
         ) : (
-          <Button variant="secondary" busy={upload.isPending} onClick={() => inputRef.current?.click()}>
+          <Button
+            variant="secondary"
+            busy={upload.isPending}
+            disabled={!canManage}
+            onClick={() => inputRef.current?.click()}
+          >
             <IconPaperclip />
             {t('receipt.attach')}
           </Button>

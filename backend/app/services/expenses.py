@@ -7,6 +7,8 @@ Rules implemented here (the routers stay thin):
 * the payer must be a group member **and** one of the participants;
 * every participant must be a group member;
 * edits are allowed for the expense creator or the group owner (§2.5);
+* receipt attach/removal follows the same creator-or-owner rule (§3.5) and
+  emits ``expense.receipt.updated`` so every open tab updates without a reload;
 * a closed group rejects new expenses and receipt uploads (409, §2.9);
 * deletes are soft (``deleted_at``); deleted rows stay in the feed but are
   excluded from every balance sum (invariant 4 does the rest). The receipt
@@ -396,13 +398,37 @@ async def delete_expense(db: AsyncSession, expense: Expense, user: User) -> None
 # --- Receipts (§3.5) ---------------------------------------------------------
 
 
+def _receipt_event_data(expense: Expense, attachment: Attachment | None) -> dict[str, Any]:
+    """The ``expense.receipt.updated`` payload (§3.2): the new attachment, or
+    ``null`` after removal. Same shape as ``AttachmentOut``."""
+    if attachment is None:
+        return {"expense_id": expense.id, "attachment": None}
+    return {
+        "expense_id": expense.id,
+        "attachment": {
+            "id": attachment.id,
+            "filename": attachment.filename,
+            "content_type": attachment.content_type,
+            "size": attachment.size,
+        },
+    }
+
+
+def _check_receipt_manager(expense: Expense, user: User) -> None:
+    """§3.5: only the expense creator or the group owner manages receipts."""
+    if user.id != expense.created_by and user.id != expense.group.created_by:
+        raise Forbidden("Only the expense creator or the group owner can manage the receipt")
+
+
 async def upload_receipt(
     db: AsyncSession,
     expense: Expense,
+    user: User,
     filename: str,
     content_type: str,
     data: bytes,
 ) -> Attachment:
+    _check_receipt_manager(expense, user)
     if expense.deleted_at is not None:
         raise Conflict("Cannot attach a receipt to a deleted expense")
     if expense.group.status == "closed":
@@ -438,10 +464,14 @@ async def upload_receipt(
             old_path.unlink()
     await db.commit()
     await db.refresh(attachment)
+    await ws_hook.emit_group(
+        db, expense.group, "expense.receipt.updated", _receipt_event_data(expense, attachment)
+    )
     return attachment
 
 
-async def delete_receipt(db: AsyncSession, expense: Expense) -> None:
+async def delete_receipt(db: AsyncSession, expense: Expense, user: User) -> None:
+    _check_receipt_manager(expense, user)
     attachment = expense.attachment
     if attachment is None:
         raise NotFound("This expense has no receipt")
@@ -450,6 +480,9 @@ async def delete_receipt(db: AsyncSession, expense: Expense) -> None:
     await db.commit()
     with contextlib.suppress(OSError):
         (Path(get_settings().upload_dir) / filename).unlink()
+    await ws_hook.emit_group(
+        db, expense.group, "expense.receipt.updated", _receipt_event_data(expense, None)
+    )
 
 
 async def read_attachment(db: AsyncSession, attachment: Attachment) -> tuple[Attachment, bytes]:

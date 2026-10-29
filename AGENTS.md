@@ -227,6 +227,7 @@ Rules:
 |---|---|
 | `expense.created` / `expense.updated` | full expense incl. exact participant shares |
 | `expense.deleted` | expense id, description (for the feed) |
+| `expense.receipt.updated` | `expense_id` + `attachment` (full `AttachmentOut`, or `null` after removal) |
 | `settlement.created` / `settlement.confirmed` / `settlement.rejected` / `settlement.cancelled` | full settlement |
 | `member.joined` / `member.left` | member user |
 | `group.closed` / `group.reopened` | group |
@@ -248,8 +249,8 @@ Append-only `ActivityEvent` rows (group, type, actor, ref, payload JSONB, create
 
 ### 3.5 Files (receipts)
 
-- `POST /expenses/{eid}/receipt` (multipart, field `file`): validates size ≤ `MAX_UPLOAD_MB`, content-type image/* or application/pdf, stores as `<uuid>.<ext>` under `UPLOAD_DIR`, writes `Attachment` row linked to the expense. Replaces any existing receipt (old file removed).
-- `DELETE /expenses/{eid}/receipt`: removes the existing receipt — the `Attachment` row and the file under `UPLOAD_DIR`. 404 when the expense has no receipt. Unlike the upload it is allowed while the group is closed (only the upload is blocked, §2.9). No balance effect, no WS event (the client refetches, same as the upload).
+- `POST /expenses/{eid}/receipt` (multipart, field `file`): validates size ≤ `MAX_UPLOAD_MB`, content-type image/* or application/pdf, stores as `<uuid>.<ext>` under `UPLOAD_DIR`, writes `Attachment` row linked to the expense. Replaces any existing receipt (old file removed). Only the expense creator or the group owner (same rule as §2.5; 403 otherwise). Emits `expense.receipt.updated` with the new `attachment`, so every open tab of every member sees the receipt without a reload.
+- `DELETE /expenses/{eid}/receipt`: removes the existing receipt — the `Attachment` row and the file under `UPLOAD_DIR`. 404 when the expense has no receipt. Unlike the upload it is allowed while the group is closed (only the upload is blocked, §2.9). Only the expense creator or the group owner (same rule as §2.5; 403 otherwise). No balance effect; emits `expense.receipt.updated` with `attachment: null`.
 - `GET /attachments/{id}`: group-members-only, streams with correct content-type + `Content-Disposition`.
 
 ### 3.6 Frontend layout
