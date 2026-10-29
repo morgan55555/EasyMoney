@@ -203,7 +203,7 @@ def create_app() -> FastAPI:
             "no currency conversion anywhere. See AGENTS.md §2 for the exact "
             "semantics."
         ),
-        version="0.02",
+        version="1.10",
         openapi_tags=_OPENAPI_TAGS,
         lifespan=lifespan,
         docs_url="/api/docs" if expose_docs else None,
