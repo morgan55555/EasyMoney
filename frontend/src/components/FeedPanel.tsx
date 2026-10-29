@@ -13,6 +13,7 @@
 import { useI18n, type TFunc } from '../i18n'
 import { formatMoney } from '../lib/money'
 import { relativeTime } from '../lib/dates'
+import { useFocusElement } from '../lib/focus'
 import { Button, Card, CardHeader, EmptyState, Spinner } from './ui'
 import { Avatar } from './Avatar'
 import { useFeed } from '../query/queries'
@@ -67,10 +68,19 @@ function makeDescribe(t: TFunc, locale: string) {
   }
 }
 
-export function FeedPanel({ groupId }: { groupId: number }) {
+// The notification payload names the event type but not the feed row id, so
+// a deep link highlights the NEWEST row of that type — the feed is newest
+// first, so that is exactly the row the notification was raised for.
+const FOCUSABLE_FEED_TYPES = new Set(['member.joined', 'member.left', 'group.closed', 'group.reopened'])
+
+export function FeedPanel({ groupId, focusType = null }: { groupId: number; focusType?: string | null }) {
   const feed = useFeed(groupId)
   const { t, locale } = useI18n()
   const describe = makeDescribe(t, locale)
+  // Deep link (notification View): scroll to + highlight the newest matching row.
+  useFocusElement(
+    focusType && FOCUSABLE_FEED_TYPES.has(focusType) ? `#feed-list [data-feed-type="${focusType}"]` : null,
+  )
 
   if (feed.loading && feed.items.length === 0) {
     return <Spinner label={t('feed.loading')} />
@@ -87,9 +97,9 @@ export function FeedPanel({ groupId }: { groupId: number }) {
   return (
     <Card>
       <CardHeader title={t('feed.title')} />
-      <ol className="divide-y divide-gray-100 dark:divide-gray-800">
+      <ol id="feed-list" className="divide-y divide-gray-100 dark:divide-gray-800">
         {feed.items.map((e) => (
-          <li key={e.id} className="px-4 py-2.5 flex items-start gap-3">
+          <li key={e.id} id={`feed-${e.id}`} data-feed-type={e.type} className="px-4 py-2.5 flex items-start gap-3">
             {e.actor_avatar_url ? (
               <Avatar url={e.actor_avatar_url} name={e.actor_name ?? t('common.someone')} size={24} />
             ) : (

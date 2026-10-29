@@ -358,8 +358,21 @@ export function Badge({
 
 // --- Card -------------------------------------------------------------------------
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm ${className}`}>{children}</div>
+export function Card({
+  children,
+  className = '',
+  id,
+}: {
+  children: ReactNode
+  className?: string
+  /** Optional DOM id (deep-link focus targets use `expense-<id>`). */
+  id?: string
+}) {
+  return (
+    <div id={id} className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm ${className}`}>
+      {children}
+    </div>
+  )
 }
 
 export function CardHeader({ title, actions }: { title: string; actions?: ReactNode }) {

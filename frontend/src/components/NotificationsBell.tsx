@@ -1,6 +1,12 @@
 /**
  * Notification bell (AGENTS.md §2.6, F8): unread count, live updates via the
  * WS `notification.created` event (query invalidation), explicit mark-read.
+ *
+ * Actionable rows: `invited` gets a Join button (opens the invite page);
+ * every other group-scoped notification gets a View button that deep-links
+ * into the group (`?tab=&focus=`) — the target tab is activated, the
+ * mentioned row is scrolled into view and flash-highlighted (lib/focus.ts).
+ * Both buttons mark the notification read.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -79,6 +85,38 @@ function invitedToken(n: NotificationOut): string | null {
   return typeof tok === 'string' && tok !== '' ? tok : null
 }
 
+/**
+ * The in-group target of a notification's View button (§2.6): the group to
+ * open, the tab to activate, and the element to scroll to + highlight
+ * (lib/focus.ts). `invited` has no target — its Join button opens the invite
+ * page instead — and a payload without `group_id` cannot deep-link.
+ */
+export function notificationTarget(n: NotificationOut): { group_id: number; tab: string; focus: string } | null {
+  const p = n.payload ?? {}
+  const gid = p.group_id
+  if (typeof gid !== 'number') return null
+  switch (n.type) {
+    case 'expense.created':
+    case 'expense.updated':
+      return typeof p.id === 'number' ? { group_id: gid, tab: 'expenses', focus: `expense:${p.id}` } : null
+    case 'settlement.created':
+    case 'settlement.confirmed':
+    case 'settlement.rejected':
+    case 'settlement.cancelled':
+      return typeof p.id === 'number' ? { group_id: gid, tab: 'payments', focus: `settlement:${p.id}` } : null
+    case 'member.joined':
+      return { group_id: gid, tab: 'activity', focus: 'feed:member.joined' }
+    case 'member.left':
+      return { group_id: gid, tab: 'activity', focus: 'feed:member.left' }
+    case 'group.closed':
+      return { group_id: gid, tab: 'activity', focus: 'feed:group.closed' }
+    case 'group.reopened':
+      return { group_id: gid, tab: 'activity', focus: 'feed:group.reopened' }
+    default:
+      return null
+  }
+}
+
 export function NotificationsBell() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -144,6 +182,7 @@ export function NotificationsBell() {
             ) : (
               items.map((n) => {
                 const token = invitedToken(n)
+                const target = notificationTarget(n)
                 return (
                   <div
                     key={n.id}
@@ -153,17 +192,35 @@ export function NotificationsBell() {
                       <p className="text-sm">{describe(n.type, n.payload)}</p>
                       <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{relativeTime(n.created_at, locale)}</p>
                     </div>
-                    {token ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void markRead.mutate([n.id])
-                          navigate(`/invite/${token}`)
-                        }}
-                        className="shrink-0 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 rounded px-2 py-1"
-                      >
-                        {t('notif.join')}
-                      </button>
+                    {token || target ? (
+                      <div className="flex shrink-0 gap-1.5">
+                        {token ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpen(false)
+                              void markRead.mutate([n.id])
+                              navigate(`/invite/${token}`)
+                            }}
+                            className="shrink-0 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 rounded px-2 py-1"
+                          >
+                            {t('notif.join')}
+                          </button>
+                        ) : null}
+                        {target ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpen(false)
+                              void markRead.mutate([n.id])
+                              navigate(`/groups/${target.group_id}?tab=${target.tab}&focus=${target.focus}`)
+                            }}
+                            className="shrink-0 text-xs font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded px-2 py-1"
+                          >
+                            {t('notif.view')}
+                          </button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 )

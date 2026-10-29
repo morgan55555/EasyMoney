@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { useI18n, type TFunc } from '../i18n'
 import { formatDate } from '../lib/dates'
 import { formatMoney } from '../lib/money'
+import { useFocusElement } from '../lib/focus'
 import { matchesAny } from '../lib/search'
 import { useDeleteExpense, useExpenses, useGroup, useMembers, useMe } from '../query/queries'
 import type { ExpenseOut } from '../types'
@@ -33,7 +34,7 @@ function categoryLabel(t: TFunc, category: string): string {
   return translated
 }
 
-export function ExpenseList({ groupId }: { groupId: number }) {
+export function ExpenseList({ groupId, focusId = null }: { groupId: number; focusId?: number | null }) {
   const expenses = useExpenses(groupId)
   const members = useMembers(groupId)
   const group = useGroup(groupId)
@@ -45,12 +46,13 @@ export function ExpenseList({ groupId }: { groupId: number }) {
   const [deleting, setDeleting] = useState<ExpenseOut | null>(null)
   const [visible, setVisible] = useState(PAGE_SIZE)
   const [query, setQuery] = useState('')
+  // Deep link (notification View): scroll to + highlight the focused expense.
+  useFocusElement(focusId != null ? `#expense-${focusId}` : null)
 
   // A new filter starts from the first page.
   useEffect(() => setVisible(PAGE_SIZE), [query])
 
   const currency = group.data?.currency ?? 'EUR'
-  if (expenses.isPending) return <Spinner label={t('expenses.loading')} />
 
   const list = expenses.data ?? []
   // Filter by description, comment, payer, participants and (translated) category.
@@ -64,6 +66,13 @@ export function ExpenseList({ groupId }: { groupId: number }) {
       ...e.participants.map((p) => p.display_name),
     ),
   )
+  // Deep link: reveal a focused row that sits below the current "show more"
+  // window (pure derivation — no extra state/effect).
+  const focusIndex = focusId != null ? filtered.findIndex((e) => e.id === focusId) : -1
+  const effVisible = focusIndex >= visible ? focusIndex + 1 : visible
+
+  if (expenses.isPending) return <Spinner label={t('expenses.loading')} />
+
   const closed = group.data?.status === 'closed'
   const canManage = (e: ExpenseOut) =>
     (me.data?.id ?? -1) === e.created_by || (me.data?.id ?? -1) === (group.data?.created_by ?? -1)
@@ -108,8 +117,8 @@ export function ExpenseList({ groupId }: { groupId: number }) {
             </Card>
           ) : (
             <>
-          {filtered.slice(0, visible).map((e) => (
-            <Card key={e.id}>
+          {filtered.slice(0, effVisible).map((e) => (
+            <Card key={e.id} id={`expense-${e.id}`}>
               <div className="p-4 space-y-2">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -179,10 +188,10 @@ export function ExpenseList({ groupId }: { groupId: number }) {
               </div>
             </Card>
           ))}
-          {visible < filtered.length ? (
+          {effVisible < filtered.length ? (
             <div className="text-center pt-1">
               <Button variant="ghost" onClick={() => setVisible((v) => v + PAGE_SIZE)}>
-                {t('expenses.showMore', { n: Math.min(PAGE_SIZE, filtered.length - visible) })}
+                {t('expenses.showMore', { n: Math.min(PAGE_SIZE, filtered.length - effVisible) })}
               </Button>
             </div>
           ) : null}

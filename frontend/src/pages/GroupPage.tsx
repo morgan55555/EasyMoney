@@ -4,7 +4,8 @@
  * Activity | People. Every tab is kept live by the WS bus.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
 import { Badge, Button, ErrorText, Modal, Spinner } from '../components/ui'
@@ -36,6 +37,12 @@ const TABS: Array<{ id: Tab; key: string }> = [
   { id: 'people', key: 'tab.people' },
 ]
 
+/** A `?tab=` URL param (notification deep links) → the tab, else expenses. */
+function parseTab(param: string | null): Tab {
+  if (param && TABS.some((tb) => tb.id === param)) return param as Tab
+  return 'expenses'
+}
+
 export function GroupPage({ groupId }: { groupId: number }) {
   const group = useGroup(groupId)
   const me = useMe()
@@ -43,11 +50,35 @@ export function GroupPage({ groupId }: { groupId: number }) {
   const close = useCloseGroup(groupId)
   const reopen = useReopenGroup(groupId)
   const { t, locale, lang } = useI18n()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [tab, setTab] = useState<Tab>('expenses')
+  const [tab, setTab] = useState<Tab>(() => parseTab(searchParams.get('tab')))
   const [confirmClose, setConfirmClose] = useState(false)
   const [confirmReopen, setConfirmReopen] = useState(false)
   const [headerError, setHeaderError] = useState('')
+
+  // Deep links (?tab=&focus=, from a notification's View button) can arrive
+  // while the page is already mounted — follow the tab param.
+  const tabParam = searchParams.get('tab')
+  useEffect(() => {
+    const parsed = parseTab(tabParam)
+    setTab((cur) => (cur === parsed ? cur : parsed))
+  }, [tabParam])
+
+  // ?focus= names the element to scroll to and highlight after the tab
+  // switch (lib/focus.ts): 'expense:<id>' | 'settlement:<id>' | 'feed:<type>'.
+  const focus = searchParams.get('focus')
+  const focusExpense = focus?.startsWith('expense:') ? Number(focus.slice('expense:'.length)) : NaN
+  const focusSettlement = focus?.startsWith('settlement:') ? Number(focus.slice('settlement:'.length)) : NaN
+  const focusFeed = focus?.startsWith('feed:') ? focus.slice('feed:'.length) : null
+
+  const selectTab = (next: Tab): void => {
+    setTab(next)
+    const sp = new URLSearchParams(searchParams)
+    sp.set('tab', next)
+    sp.delete('focus')
+    setSearchParams(sp, { replace: true })
+  }
 
   if (group.isPending) return <Spinner label={t('group.loading')} />
   if (group.isError) return <ErrorText>{t('group.loadError')}</ErrorText>
@@ -125,7 +156,7 @@ export function GroupPage({ groupId }: { groupId: number }) {
           {TABS.map((tb) => (
             <button
               key={tb.id}
-              onClick={() => setTab(tb.id)}
+              onClick={() => selectTab(tb.id)}
               className={`whitespace-nowrap px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
                 tab === tb.id
                   ? 'border-indigo-600 text-indigo-700 dark:text-indigo-400'
@@ -142,10 +173,14 @@ export function GroupPage({ groupId }: { groupId: number }) {
       </div>
 
       {/* Body. */}
-      {tab === 'expenses' ? <ExpenseList groupId={groupId} /> : null}
+      {tab === 'expenses' ? (
+        <ExpenseList groupId={groupId} focusId={Number.isFinite(focusExpense) ? focusExpense : null} />
+      ) : null}
       {tab === 'balances' ? <BalancesPanel groupId={groupId} /> : null}
-      {tab === 'payments' ? <SettlementsPanel groupId={groupId} /> : null}
-      {tab === 'activity' ? <FeedPanel groupId={groupId} /> : null}
+      {tab === 'payments' ? (
+        <SettlementsPanel groupId={groupId} focusId={Number.isFinite(focusSettlement) ? focusSettlement : null} />
+      ) : null}
+      {tab === 'activity' ? <FeedPanel groupId={groupId} focusType={focusFeed} /> : null}
       {tab === 'invites' ? <InvitePanel groupId={groupId} /> : null}
       {tab === 'people' ? <PeoplePanel groupId={groupId} /> : null}
 

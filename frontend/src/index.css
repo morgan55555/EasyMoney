@@ -33,3 +33,20 @@ html.dark {
   background-image: repeating-linear-gradient(45deg, currentColor 0px, currentColor 6px, transparent 6px, transparent 12px);
   animation: btn-stripes-move 0.8s linear infinite;
 }
+
+/* Notification deep-link: a fading indigo ring around the element the View
+   button scrolled to (lib/focus.ts adds .focus-flash for ~2.5s). Box-shadow
+   only, so the layout never shifts, and it follows the element's own
+   border-radius; the indigo reads on both themes. */
+.focus-flash {
+  animation: focus-flash-fade 2.5s ease-out;
+}
+@keyframes focus-flash-fade {
+  0%,
+  55% {
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.55); /* indigo-500 */
+  }
+  100% {
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0);
+  }
+}

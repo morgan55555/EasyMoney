@@ -295,6 +295,7 @@ export const ru: Dict = {
   'notif.aMember': 'Участник',
   'notif.invited': '{{inviter}} пригласил(а) вас в группу {{group}}',
   'notif.join': 'Присоединиться',
+  'notif.view': 'Просмотреть',
   'notif.groupClosed': 'Группа была закрыта',
   'notif.groupReopened': 'Группа была открыта снова',
 

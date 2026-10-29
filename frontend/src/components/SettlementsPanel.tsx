@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react'
 import { useI18n } from '../i18n'
 import { formatMoney } from '../lib/money'
 import { formatDateTime } from '../lib/dates'
+import { useFocusElement } from '../lib/focus'
 import {
   useCancelSettlement,
   useConfirmSettlement,
@@ -34,13 +35,16 @@ const STATE_TONE: Record<SettlementState, 'gray' | 'green' | 'red' | 'amber' | '
   cancelled: 'gray',
 }
 
-export function SettlementsPanel({ groupId }: { groupId: number }) {
+export function SettlementsPanel({ groupId, focusId = null }: { groupId: number; focusId?: number | null }) {
   const settlements = useSettlements(groupId)
   const balances = useGroupBalances(groupId)
   const group = useGroup(groupId)
   const me = useMe()
   const { t, locale } = useI18n()
   const [showPropose, setShowPropose] = useState(false)
+  // Deep link (notification View): scroll to + highlight the focused settlement
+  // (pending or history — the id is unique across both lists).
+  useFocusElement(focusId != null ? `#settlement-${focusId}` : null)
 
   const confirm = useConfirmSettlement(groupId)
   const reject = useRejectSettlement(groupId)
@@ -78,7 +82,7 @@ export function SettlementsPanel({ groupId }: { groupId: number }) {
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {pending.map((s) => (
-              <li key={s.id} className="px-4 py-3 flex items-center justify-between gap-3">
+              <li key={s.id} id={`settlement-${s.id}`} className="px-4 py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm text-gray-800 dark:text-gray-100 flex items-center gap-1.5">
                     <Avatar url={s.from_avatar_url} name={s.from_name} size={18} />
@@ -138,7 +142,7 @@ export function SettlementsPanel({ groupId }: { groupId: number }) {
           <CardHeader title={t('payments.historyTitle')} />
           <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {history.map((s) => (
-              <li key={s.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
+              <li key={s.id} id={`settlement-${s.id}`} className="px-4 py-2.5 flex items-center justify-between gap-3">
                 <span className="text-sm text-gray-700 dark:text-gray-200 min-w-0 flex items-center gap-1.5">
                   <Avatar url={s.from_avatar_url} name={s.from_name} size={18} />
                   <span className="truncate">{s.from_name}</span>

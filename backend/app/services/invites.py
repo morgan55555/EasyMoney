@@ -175,7 +175,12 @@ async def accept_invite(db: AsyncSession, user: User, token: str) -> Group:
         invite.status = "used"
     invite.used_by = user.id
     invite.used_at = now
-    payload = {"user_id": user.id, "display_name": user.display_name}
+    payload = {
+        "user_id": user.id,
+        "display_name": user.display_name,
+        "group_id": group.id,
+        "group_name": group.name,
+    }
     await feed_service.add_event(
         db,
         group.id,

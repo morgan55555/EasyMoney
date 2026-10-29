@@ -12,11 +12,12 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 
 import type { NotificationOut } from '../../types'
 import { keys } from '../../query/queries'
-import { NotificationsBell } from '../NotificationsBell'
+import { NotificationsBell, notificationTarget } from '../NotificationsBell'
 import {
   render,
   click,
   clickByText,
+  buttonsWithText,
   hasText,
   flush,
   stubFetch,
@@ -135,5 +136,149 @@ describe('NotificationsBell', () => {
     } finally {
       stub.restore()
     }
+  })
+
+  it('a View button opens the group at the right tab with the focus, marking it read', async () => {
+    let loc = ''
+    const Probe = () => {
+      const l = useLocation()
+      loc = l.pathname + l.search
+      return null
+    }
+    const payload = { id: 12, group_id: 5, description: 'Coffee', amount: '4.00', currency: 'USD', payer: 'Bob' }
+    const res = render(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ['/'] },
+        createElement(NotificationsBell),
+        createElement(Probe),
+      ),
+      {
+        seed: (qc: QueryClient) => {
+          qc.setQueryData(keys.notifications, { items: [n(1, 'expense.created', payload)], unread_count: 1 })
+        },
+      },
+    )
+    r = res
+    const stub = stubFetch({
+      '/api/notifications/read': { marked: 1 },
+      '/api/notifications': { items: [n(1, 'expense.created', payload, true)], unread_count: 0 },
+    })
+    try {
+      click(bellButton(res))
+      expect(buttonsWithText(res.container, 'View').length).toBe(1)
+      clickByText(res.container, 'View')
+      await flush()
+      expect(loc).toBe('/groups/5?tab=expenses&focus=expense:12')
+      expect(stub.calls.some((c) => c.url.includes('/api/notifications/read'))).toBe(true)
+    } finally {
+      stub.restore()
+    }
+  })
+
+  it('a settlement View button targets the payments tab', async () => {
+    let loc = ''
+    const Probe = () => {
+      const l = useLocation()
+      loc = l.pathname + l.search
+      return null
+    }
+    const payload = { id: 3, group_id: 7, from_name: 'Bob', to_name: 'Alice', amount: '10.00', currency: 'USD', state: 'pending' }
+    const res = render(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ['/'] },
+        createElement(NotificationsBell),
+        createElement(Probe),
+      ),
+      {
+        seed: (qc: QueryClient) => {
+          qc.setQueryData(keys.notifications, { items: [n(1, 'settlement.created', payload)], unread_count: 1 })
+        },
+      },
+    )
+    r = res
+    const stub = stubFetch({
+      '/api/notifications/read': { marked: 1 },
+      '/api/notifications': { items: [n(1, 'settlement.created', payload, true)], unread_count: 0 },
+    })
+    try {
+      click(bellButton(res))
+      clickByText(res.container, 'View')
+      await flush()
+      expect(loc).toBe('/groups/7?tab=payments&focus=settlement:3')
+    } finally {
+      stub.restore()
+    }
+  })
+
+  it('an "invited" notification has Join but no View button', () => {
+    const payload = { group_id: 1, group_name: 'Trip', token: 'tok123', inviter_name: 'Alice' }
+    const res = render(createElement(MemoryRouter, null, createElement(NotificationsBell)), {
+      seed: (qc: QueryClient) => {
+        qc.setQueryData(keys.notifications, { items: [n(1, 'invited', payload)], unread_count: 1 })
+      },
+    })
+    r = res
+    click(bellButton(res))
+    expect(buttonsWithText(res.container, 'Join').length).toBe(1)
+    expect(buttonsWithText(res.container, 'View').length).toBe(0)
+  })
+})
+
+describe('notificationTarget', () => {
+  it('maps expense notifications to the expenses tab with the expense id', () => {
+    expect(notificationTarget(n(1, 'expense.created', { id: 12, group_id: 5 }))).toEqual({
+      group_id: 5,
+      tab: 'expenses',
+      focus: 'expense:12',
+    })
+    expect(notificationTarget(n(1, 'expense.updated', { id: 13, group_id: 5 }))).toEqual({
+      group_id: 5,
+      tab: 'expenses',
+      focus: 'expense:13',
+    })
+  })
+
+  it('maps settlement notifications to the payments tab with the settlement id', () => {
+    expect(notificationTarget(n(1, 'settlement.created', { id: 3, group_id: 5 }))).toEqual({
+      group_id: 5,
+      tab: 'payments',
+      focus: 'settlement:3',
+    })
+    expect(notificationTarget(n(1, 'settlement.confirmed', { id: 4, group_id: 5 }))).toEqual({
+      group_id: 5,
+      tab: 'payments',
+      focus: 'settlement:4',
+    })
+  })
+
+  it('maps member and group events to the activity tab', () => {
+    expect(notificationTarget(n(1, 'member.joined', { group_id: 5 }))).toEqual({
+      group_id: 5,
+      tab: 'activity',
+      focus: 'feed:member.joined',
+    })
+    expect(notificationTarget(n(1, 'member.left', { group_id: 5 }))).toEqual({
+      group_id: 5,
+      tab: 'activity',
+      focus: 'feed:member.left',
+    })
+    expect(notificationTarget(n(1, 'group.closed', { group_id: 5 }))).toEqual({
+      group_id: 5,
+      tab: 'activity',
+      focus: 'feed:group.closed',
+    })
+    expect(notificationTarget(n(1, 'group.reopened', { group_id: 5 }))).toEqual({
+      group_id: 5,
+      tab: 'activity',
+      focus: 'feed:group.reopened',
+    })
+  })
+
+  it('returns null for invited (its Join button covers it) and for payloads without group_id', () => {
+    expect(notificationTarget(n(1, 'invited', { group_id: 5, token: 't' }))).toBeNull()
+    expect(notificationTarget(n(1, 'expense.created', { id: 12 }))).toBeNull()
+    expect(notificationTarget(n(1, 'member.joined', null))).toBeNull()
   })
 })

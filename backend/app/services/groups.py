@@ -143,7 +143,12 @@ async def leave_group(db: AsyncSession, group: Group, user: User) -> None:
     )
     if membership is None:
         raise Conflict("You are not a member of this group")
-    payload = {"user_id": user.id, "display_name": user.display_name}
+    payload = {
+        "user_id": user.id,
+        "display_name": user.display_name,
+        "group_id": group.id,
+        "group_name": group.name,
+    }
     await db.delete(membership)
     await feed_service.add_event(
         db,
@@ -185,7 +190,7 @@ async def close_group(db: AsyncSession, group: Group, user: User) -> Group:
         raise Conflict("The group is already closed")
     group.status = "closed"
     group.closed_at = datetime.now(UTC)
-    payload = {"closed_by": user.id}
+    payload = {"closed_by": user.id, "group_id": group.id, "group_name": group.name}
     await feed_service.add_event(
         db,
         group.id,
@@ -257,7 +262,7 @@ async def reopen_group(db: AsyncSession, group: Group, user: User) -> Group:
         raise Conflict("The group is not closed")
     group.status = "active"
     group.closed_at = None
-    payload = {"reopened_by": user.id}
+    payload = {"reopened_by": user.id, "group_id": group.id, "group_name": group.name}
     await feed_service.add_event(
         db,
         group.id,
@@ -294,6 +299,8 @@ async def remove_member(db: AsyncSession, group: Group, actor: User, user_id: in
         "user_id": user_id,
         "display_name": member.display_name if member else f"user {user_id}",
         "removed_by": actor.id,
+        "group_id": group.id,
+        "group_name": group.name,
     }
     await db.delete(membership)
     await feed_service.add_event(
