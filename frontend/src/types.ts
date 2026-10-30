@@ -291,6 +291,25 @@ export interface NotificationListOut {
   unread_count: number
 }
 
+// --- Web Push (§2.14) ------------------------------------------------------------
+
+/** The browser's push subscription keys (base64url, no padding). */
+export interface PushSubscriptionKeys {
+  p256dh: string
+  auth: string
+}
+
+/** A Web Push subscription (the browser's PushSubscription.toJSON() shape). */
+export interface PushSubscriptionJson {
+  endpoint: string
+  keys: PushSubscriptionKeys
+}
+
+/** The VAPID public key endpoint response (base64url, no padding). */
+export interface PushVapidKeyOut {
+  key: string
+}
+
 // --- Activity feed (§3.3) ---------------------------------------------------------
 
 export interface ActivityEventOut {

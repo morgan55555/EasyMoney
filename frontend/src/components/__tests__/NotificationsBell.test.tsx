@@ -12,7 +12,8 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 
 import type { NotificationOut } from '../../types'
 import { keys } from '../../query/queries'
-import { NotificationsBell, notificationTarget } from '../NotificationsBell'
+import { NotificationsBell } from '../NotificationsBell'
+import { notificationTarget } from '../../lib/notificationText'
 import {
   render,
   click,

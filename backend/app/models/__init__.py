@@ -16,6 +16,7 @@ from app.models.group import Group
 from app.models.invitation import Invitation
 from app.models.membership import Membership
 from app.models.notification import Notification
+from app.models.push_subscription import PushSubscription
 from app.models.settlement import Settlement
 from app.models.token import RefreshToken
 from app.models.user import User
@@ -31,6 +32,7 @@ __all__ = [
     "Invitation",
     "Membership",
     "Notification",
+    "PushSubscription",
     "RefreshToken",
     "Settlement",
     "User",

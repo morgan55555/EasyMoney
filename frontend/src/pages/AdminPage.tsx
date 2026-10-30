@@ -242,7 +242,7 @@ function EditUserModal({ user, onClose }: { user: AdminUserOut; onClose: () => v
             type="checkbox"
             checked={isAdmin}
             onChange={(e) => setIsAdmin(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            className="h-4 w-4 rounded border-gray-300 accent-indigo-600 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800"
           />
           {t('admin.isAdmin')}
         </label>

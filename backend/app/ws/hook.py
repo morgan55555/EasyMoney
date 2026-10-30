@@ -8,7 +8,8 @@ its transaction commits:
   snapshot injected into ``data`` (invariant 4: the aggregate is already
   correct post-commit, so the push is just a re-read);
 * ``emit_notifications(group_id, rows)`` — user-scoped fan-out of the bell:
-  each notified user's tabs learn of their own notification row;
+  each notified user's tabs learn of their own notification row; every row
+  additionally fires a Web Push task (``services/push``, §2.14);
 * ``emit_notification_read(user_id)`` — user-scoped read-state change: every
   open tab of the user refetches the bell so a mark-read in one tab clears the
   unread badge in the others (AGENTS.md §2.6, req 7);
@@ -39,6 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.group import Group
 from app.models.notification import Notification
 from app.services import balances as balances_service
+from app.services import push as push_service
 from app.ws import user_groups
 from app.ws.bus import EventBus
 from app.ws.registry import ConnectionManager
@@ -111,7 +113,16 @@ async def emit_group(db: AsyncSession, group: Group, type: str, data: dict[str, 
 
 
 async def emit_notifications(group_id: int, notifications: list[Notification]) -> None:
-    """Bell event: one ``notification.created`` per row, to that user only."""
+    """Bell event: one ``notification.created`` per row, to that user only.
+
+    Independent of the WebSocket fan-out, every row also fires a Web Push
+    task (``services.push.push_notification_row``, AGENTS.md §2.14): a
+    fire-and-forget delivery to the user's browser subscriptions that reaches
+    the OS notification even when the app is fully closed. Without a sender
+    plugged in (VAPID keys unset) the tasks no-op — exactly today's behaviour.
+    """
+    for notification in notifications:
+        push_service.track(push_service.push_notification_row(notification.id))
     if _bus is None and _manager is None:
         return
     for notification in notifications:

@@ -9,39 +9,16 @@ the app engine's pooled connections stay on one event loop.
 
 from __future__ import annotations
 
-import os
-from collections.abc import Iterator
 from datetime import UTC, datetime
 
 import jwt
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core import security
 from app.core.config import get_settings
-from app.main import create_app
 from app.models.user import User
 from app.services import groups as groups_service
-
-# Must stay in sync with conftest.TEST_DATABASE_URL.
-TEST_DATABASE_URL = "postgresql+asyncpg://easymoney:easymoney@localhost:5432/easymoney_test"
-
-
-@pytest.fixture(scope="session")
-def api_client() -> Iterator[TestClient]:
-    """The real app with its settings pointed at the test database."""
-    original = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
-    get_settings.cache_clear()
-    app = create_app()
-    with TestClient(app) as client:  # lifespan: ws manager + idle scheduler
-        yield client
-    if original is None:
-        os.environ.pop("DATABASE_URL", None)
-    else:
-        os.environ["DATABASE_URL"] = original
-    get_settings.cache_clear()
 
 
 def _auth(token: str) -> dict[str, str]:

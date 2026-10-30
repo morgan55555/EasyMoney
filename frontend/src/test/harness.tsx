@@ -21,6 +21,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { I18nProvider } from '../i18n'
+import { BrowserNotifyProvider } from '../lib/browserNotify'
 import { ThemeProvider } from '../lib/theme'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -32,6 +33,8 @@ export interface RenderOptions {
   lang?: 'en' | 'ru'
   /** Wrap in `ThemeProvider` (components that call `useTheme`). */
   theme?: boolean
+  /** Wrap in `BrowserNotifyProvider` (components that call `useBrowserNotify`). */
+  notify?: boolean
 }
 
 export interface RenderResult {
@@ -64,6 +67,7 @@ export function render(ui: ReactElement, opts: RenderOptions = {}): RenderResult
   let node: ReactElement = createElement(QueryClientProvider, { client: qc }, ui)
   if (opts.lang === 'ru') node = createElement(I18nProvider, null, node)
   if (opts.theme) node = createElement(ThemeProvider, null, node)
+  if (opts.notify) node = createElement(BrowserNotifyProvider, null, node)
 
   act(() => {
     root.render(node)

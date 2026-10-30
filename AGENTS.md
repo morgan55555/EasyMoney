@@ -192,6 +192,19 @@ A new change request revokes the previous pending `password` token (the reissue 
 
 **SMTP master switch.** `SMTP_ENABLED` (default `true`) is the kill switch for all outbound mail: when `false`, `send_mail` is a pure no-op — nothing is sent, nothing logged — **even when `SMTP_HOST` is set**, and all confirmation flows (registration, email change, password change) are skipped (they apply immediately). `SMTP_HOST` unset (with the switch on) → log-only dev mode as before. Every mail path still goes through `services/mail.py`.
 
+### 2.14 Browser (Web) notifications (Web Push)
+
+OS-level notifications are delivered via **Web Push** (a service worker + VAPID keys + a push subscription), so they arrive **even when the app is fully closed** — no WebSocket required. The former in-page `new Notification` path is removed.
+
+- **Two parallel systems.** The in-app system — the bell, the unread badge, and the sound on `notification.created` (§2.6, §3.2) — is **unchanged and always fires**. OS-level notifications are an **additive** layer delivered through Web Push. One failing or absent does not affect the other.
+- **Display condition.** An OS notification is shown **only when all** of the following hold: (1) the user's client-only *Browser notifications* preference is **on**; (2) an active push subscription exists for the user (creating one implies the browser push permission is granted); (3) **no** app window is visible — the service worker checks `self.clients.matchAll({ type: 'window' })` and suppresses the OS notification when any app tab has `visibilityState === 'visible'`. When the app is a visible tab, the bell badge + sound already inform the user, so no OS notification is raised (no double-alerting). With no clients at all (app closed) the notification shows.
+- **Text.** The service worker and the bell share one text source: the pure `makeDescribe` + `invitedToken` + `notificationTarget` helpers (`frontend/src/lib/notificationText.ts`) and the locale dictionaries via `frontend/src/i18n/core.ts` (a React-free module so the SW bundle can reuse them). So bell and OS notification render identical text. The push payload carries `lang` = the user's **preferred_language** at send time, so the notification renders in the user's language even if the browser UI is in another. Title = the group name from the payload when present, else the app title.
+- **Click.** The service worker's `notificationclick` closes the notification, focuses an existing app window (or opens one) and navigates to the same target the bell's View/Join buttons use: `/groups/{group_id}?tab={tab}&focus={focus}` for group-scoped rows, `/invite/{token}` for `invited` rows, else just focus.
+- **Preference & permission.** The preference is **client-only** (localStorage, default off, cross-tab synced), never part of the API — like the theme (§2.13). The browser push-permission prompt is raised **only inside the user's Settings-toggle gesture** via `PushManager.subscribe()`; it is never requested on page load or by the service worker. Turning the toggle off unsubscribes (local + server) and clears the preference; the permission itself is never revoked programmatically.
+- **Sound is unaffected:** `playNotification()` still runs on every `notification.created`, visible or not.
+- **Server side.** A `push_subscriptions` table holds one row per (user, browser push endpoint). Endpoints: `GET /api/push/vapid-public-key` (public; **404 when push is disabled**), `POST /api/push/subscribe` (upsert by `(user_id, endpoint)`), `POST /api/push/unsubscribe` (idempotent delete). The push fires **post-commit** from the notification emit path (§2.6) as a fire-and-forget task with its own DB session; it never blocks or fails the triggering request. It runs once, on the replica that wrote the data (so each notification is pushed exactly once in multi-replica mode), and also when the user has no open sockets. Subscriptions dead at the push service (HTTP 404/410) are pruned; other errors are logged and swallowed. VAPID keys come from env (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`); with both keys unset push is **disabled** (public-key endpoint 404, frontend shows the unsupported hint, bell/sound unchanged).
+- **Multi-tab (req 7).** The preference is per-browser (localStorage, synced via the `storage` event); the service worker applies the same visibility rule for all windows, so tabs stay consistent.
+
 ## 3. Architecture & conventions
 
 ### 3.1 Backend layout
@@ -212,9 +225,14 @@ app/
                      #   knows split/balance formulas
   ws/bus.py          # EventBus: LocalBus / RedisBus cross-replica fan-out (§3.2)
   ws/user_groups.py  # WS-handshake group-list cache (fail-open, §3.2)
+  ws/hook.py         # post-commit emit: group events + the bell, and the Web Push
+                     #   fire-and-forget task (services/push.push_notification_row, §2.14)
   workers/scheduler.py  # APScheduler job: overdue scan (2.7), single-flight via lock
   workers/lock.py    # single-flight Redis lock for the scheduler (§2.7)
 ```
+
+`backend/scripts/generate_vapid.py` prints ready-to-paste
+`VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` lines for `.env` (§2.14).
 
 Rules:
 - Routers never import ORM models directly beyond typing; they call services. Services never touch FastAPI request objects.
@@ -295,14 +313,14 @@ Rules:
 ### 3.7 Database
 
 - PostgreSQL 16. Alembic for every schema change (no manual DDL). Money columns `NUMERIC(14,3)`; ids `BIGSERIAL`; money-bearing queries use `NUMERIC` arithmetic only.
-- Indexes: `expenses(group_id, date)`, `expenses.payer`, `expense_participants(expense_id, user_id)`, `settlements(group_id, state)`, `activity(group_id, created_at desc)`, `notifications(user_id, read_at)`, `memberships(group_id, user_id)` unique, `email_tokens.token` unique, `email_tokens(user_id, purpose)`.
+- Indexes: `expenses(group_id, date)`, `expenses.payer`, `expense_participants(expense_id, user_id)`, `settlements(group_id, state)`, `activity(group_id, created_at desc)`, `notifications(user_id, read_at)`, `memberships(group_id, user_id)` unique, `email_tokens.token` unique, `email_tokens(user_id, purpose)`, `push_subscriptions(user_id, endpoint)` unique + `push_subscriptions.user_id` (§2.14).
 - Avatars are `text` (base64, no `data:` prefix) + `avatar_content_type`; never on a money column.
 - `Membership.joined_at` is the tie-broken sort key for the split remainder (2.1) — it must be stable; set it in the DB (`now()`), never client-supplied.
 - `attachments.filename` doubles as the receipt **object-store key** (§3.5) — there is no separate key column and no `uploads` Docker volume; receipt bytes live in the object store, not in the DB.
 
 ## 4. Environment & running
 
-See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `SMTP_ENABLED`, `EMAIL_REGISTER_CONFIRMATION`, `EMAIL_CHANGE_CONFIRMATION`, `PASSWORD_CHANGE_CONFIRMATION`, `CONFIRMATION_TOKEN_HOURS`, `EMAIL_CHANGE_REVERT_DAYS`, `REGISTRATION_OPEN`, `MAX_AVATAR_MB`, `DEBUG`, `DEBT_OVERDUE_DAYS`, `REMINDER_INTERVAL_DAYS`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `STORAGE_BACKEND`, `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `UPLOAD_DIR` (only when `STORAGE_BACKEND=local`), `CORS_ORIGINS`, `REDIS_URL` (empty = local mode: in-process bus, no caches, lock no-op — the pre-Redis behaviour), `SNAPSHOT_CACHE_TTL_S`, `USER_GROUPS_CACHE_TTL_S`, `SCHEDULER_LOCK_TTL_S`.
+See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `SMTP_ENABLED`, `EMAIL_REGISTER_CONFIRMATION`, `EMAIL_CHANGE_CONFIRMATION`, `PASSWORD_CHANGE_CONFIRMATION`, `CONFIRMATION_TOKEN_HOURS`, `EMAIL_CHANGE_REVERT_DAYS`, `REGISTRATION_OPEN`, `MAX_AVATAR_MB`, `DEBUG`, `DEBT_OVERDUE_DAYS`, `REMINDER_INTERVAL_DAYS`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `STORAGE_BACKEND`, `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `UPLOAD_DIR` (only when `STORAGE_BACKEND=local`), `CORS_ORIGINS`, `REDIS_URL` (empty = local mode: in-process bus, no caches, lock no-op — the pre-Redis behaviour), `SNAPSHOT_CACHE_TTL_S`, `USER_GROUPS_CACHE_TTL_S`, `SCHEDULER_LOCK_TTL_S`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (empty keys = Web Push disabled, §2.14; generate via `backend/scripts/generate_vapid.py`).
 
 Local dev without Docker (optional): `alembic upgrade head`, `uvicorn app.main:app --reload`, `npm run dev` (Vite proxies `/api`, `/ws` to `:8000`).
 
@@ -324,6 +342,7 @@ A change is done when:
 5. No money path uses floats (CI: `ruff` rule + grep guard in tests).
 6. **Account/admin tests pass.** `backend/tests/test_accounts.py` must cover: first-ever user becomes admin (and the migration backfills the lowest-id user when none exists); registration restriction (`REGISTRATION_OPEN=false` → 403 once a user exists, `GET /api/auth/status` reflects it); register-confirmation on/off (unverified until confirmed vs. verified immediately); email-change confirmation on/off (two mails — confirm to the new address, revert to the previous one — vs. immediate swap) plus the full revert (cancels a pending change, switches back after a confirmed one, 409s); token lifecycle (confirm marks used, resend revokes the previous pending token, expiry); SMTP kill switch (`SMTP_ENABLED=false` → no send, confirmations skipped); avatar set/clear; admin create/patch (no confirmation, last-admin guard). Frontend: theme manager, i18n preferred-language default, Avatar fallback, settings modal, register-form hiding.
 7. **Multi-replica tests pass.** `backend/tests/` must contain and keep green — all in-process against fakeredis (no real Redis needed): `test_redis_bus.py` (cross-replica delivery, symmetric publisher delivery, control messages, publish-failure fallback, envelope codec round-trip); `test_multi_instance_flow.py` (end-to-end: a REST write on replica A reaches a socket parked on replica B; join/leave control messages reach both; the leaver's tabs are unsubscribed); `test_scheduler_lock.py` (single-flight: exactly one of two replicas acquires; release only by owner; TTL expiry; fail-open on Redis error); `test_user_groups_cache.py` (hit/miss, invalidation, corrupt-value recovery); `test_snapshot_cache.py` (hit/miss, `refresh_snapshot_cache` on the real service path, money stays correct on the wire).
+8. **Web Push tests pass.** `backend/tests/test_push.py` must cover: `GET /api/push/vapid-public-key` 404 when push is disabled (no VAPID keys) and 200 `{key}` when enabled; `POST /api/push/subscribe` upserts on `(user_id, endpoint)` (one row, keys updated on a second call) and `POST /api/push/unsubscribe` is idempotent (204, row gone, repeat still 204); both are 401 without a token; the post-commit fire path (a notifying write, e.g. an expense) delivers exactly one push per subscribed user with a payload carrying `lang` = the user's `preferred_language` and the notification `{id, type, payload, created_at}`, while the `notification.created` WS event is still emitted in parallel; dead subscriptions (push-service HTTP 404/410) are pruned while other errors (e.g. 503) keep the row; and with no sender plugged nothing is sent and nothing errors (today's behaviour).
 
 ## 6. Requirements traceability
 
@@ -363,6 +382,7 @@ A change is done when:
 | 32 | Disable SMTP entirely via env (no mail, no confirmations) | §2.13 (`SMTP_ENABLED` kill switch in `services/mail.py`) |
 | 33 | Password change with optional email confirmation (pending hash rides on the token, applied only on confirm) | §2.13 (`PASSWORD_CHANGE_CONFIRMATION`, `email_tokens.password_hash`, `POST /me/password/change`) |
 | 34 | Multi-replica backend behind a load balancer: cross-instance WS fan-out, short-TTL display caches, single-flight reminder scan — Redis is optional, local mode when unset | §2.7 (lock), §3.2 (bus + caches), §4 (`REDIS_URL` + TTLs), `app/ws/bus.py`, `app/ws/user_groups.py`, `app/core/redis_client.py`, `app/workers/lock.py` |
+| 35 | Browser (Web) notifications via **Web Push** (service worker + VAPID): works with the app closed; suppressed while any app tab is visible; client-only toggle; permission only on the Settings gesture; click deep-links; the in-app bell + sound run in parallel, unchanged | §2.14, `app/services/push.py`, `app/api/push.py`, `app/models/push_subscription.py`, `app/ws/hook.py`, `frontend/src/sw/sw.ts`, `frontend/src/lib/push.ts`, `frontend/src/lib/browserNotify.tsx`, `frontend/src/components/SettingsModal.tsx` |
 
 ## 7. Style
 

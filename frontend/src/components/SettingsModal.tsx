@@ -1,14 +1,18 @@
 /**
- * Settings modal (AGENTS.md §2.13, §3.6): change display name, avatar
+ * Settings modal (AGENTS.md §2.13, §2.14, §3.6): change display name, avatar
  * (upload / clear), email (with the confirm-to-old-address flow), password
  * (with the confirmation-link flow), preferred language (the only place it
- * is changed server-side) and the UI theme (a client-only preference,
- * separate from preferred language).
+ * is changed server-side), the UI theme and the browser-notifications
+ * preference (both client-only, never sent to the server).
  *
  * Name / language save through PATCH /me; email through POST /me/email/change
  * and password through POST /me/password/change (each returns "changed" or
  * "confirmation_sent"); avatar through the multipart /me/avatar endpoints.
  * Theme uses the ThemeManager context and is never sent to the server.
+ * Browser notifications go through Web Push (§2.14): enabling the toggle
+ * registers the service worker and calls PushManager.subscribe on the user's
+ * gesture (the one place the permission prompt is raised), then stores the
+ * subscription server-side; disabling forgets it locally and server-side.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -16,6 +20,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ApiError } from '../api/client'
 import { useI18n } from '../i18n'
 import { useChangePassword, useClearAvatar, useChangeEmail, usePatchMe, useSetAvatar, useMe } from '../query/queries'
+import { useBrowserNotify } from '../lib/browserNotify'
+import { disablePush, enablePush, pushSupported } from '../lib/push'
 import { useTheme, type Theme } from '../lib/theme'
 import { Avatar } from './Avatar'
 import { Button, ErrorText, Field, Modal, Select, TextInput } from './ui'
@@ -138,6 +144,51 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
 
   const meData = me.data
   const themeOptions: Theme[] = ['light', 'dark', 'system']
+
+  // Browser notifications via Web Push (§2.14): a client-only preference. The
+  // checkbox is controlled locally so it reverts to off when the permission
+  // prompt is denied, or when push can't be enabled (no Web Push in the
+  // browser, or the server has push disabled — the VAPID endpoint 404s).
+  const { enabled: notifyEnabled, setEnabled: setNotifyEnabled } = useBrowserNotify()
+  const [notifyChecked, setNotifyChecked] = useState(notifyEnabled)
+  const [notifyBusy, setNotifyBusy] = useState(false)
+  const [notifyState, setNotifyState] = useState<'ok' | 'denied' | 'unsupported'>('ok')
+  useEffect(() => setNotifyChecked(notifyEnabled), [notifyEnabled])
+
+  const browserPush = pushSupported()
+  const toggleNotify = async (next: boolean) => {
+    setNotifyChecked(next)
+    if (!next) {
+      // Turning off: forget the subscription locally + server-side, stay off.
+      setNotifyBusy(true)
+      try {
+        await disablePush()
+      } finally {
+        setNotifyBusy(false)
+      }
+      setNotifyEnabled(false)
+      return
+    }
+    if (!browserPush) {
+      setNotifyChecked(false)
+      setNotifyState('unsupported')
+      return
+    }
+    // Inside the user's gesture: enablePush subscribes (raising the prompt).
+    setNotifyBusy(true)
+    try {
+      const result = await enablePush()
+      if (result === 'ok') {
+        setNotifyState('ok')
+        setNotifyEnabled(true)
+      } else {
+        setNotifyChecked(false)
+        setNotifyState(result)
+      }
+    } finally {
+      setNotifyBusy(false)
+    }
+  }
 
   return (
     <Modal title={t('settings.title')} onClose={onClose}>
@@ -298,6 +349,26 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
               ))}
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.themeHint')}</p>
+          </div>
+          <div className="space-y-1">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={notifyChecked}
+                onChange={(e) => void toggleNotify(e.target.checked)}
+                disabled={!browserPush || notifyBusy}
+                aria-label={t('settings.browserNotify')}
+                className="h-4 w-4 rounded border-gray-300 accent-indigo-600 focus:ring-indigo-500 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800"
+              />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('settings.browserNotify')}</span>
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {!browserPush || notifyState === 'unsupported'
+                ? t('settings.browserNotifyUnsupported')
+                : notifyState === 'denied'
+                  ? t('settings.browserNotifyDenied')
+                  : t('settings.browserNotifyHint')}
+            </p>
           </div>
         </section>
 

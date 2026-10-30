@@ -28,6 +28,7 @@ from app.api import groups as groups_api
 from app.api import invites as invites_api
 from app.api import me as me_api
 from app.api import notifications as notifications_api
+from app.api import push as push_api
 from app.api import settlements as settlements_api
 from app.api import users as users_api
 from app.core import redis_client
@@ -41,6 +42,7 @@ from app.core.errors import (
     ValidationFailed,
 )
 from app.db.session import dispose_engine
+from app.services import push as push_service
 from app.services import storage as storage_service
 from app.workers import scheduler as scheduler_worker
 from app.ws import bus as ws_bus
@@ -108,6 +110,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ws_hook.set_bus(bus)
     await storage_service.get_store().ready()
     scheduler = scheduler_worker.start_scheduler()
+    # Web Push (AGENTS.md §2.14): the real sender is plugged in only when both
+    # VAPID keys are configured; without them the emit-path push tasks no-op
+    # (nothing sent, nothing errors — today's behaviour).
+    settings = get_settings()
+    if settings.push_enabled:
+        push_service.set_sender(
+            push_service.WebPushSender(settings.vapid_private_key, settings.vapid_subject)
+        )
     try:
         yield
     finally:
@@ -117,6 +127,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await bus.close()
         ws_hook.set_bus(None)
         ws_hook.set_manager(None)
+        # Let in-flight Web Push sends finish before the pool goes away.
+        await push_service.drain()
         await redis_client.dispose_redis()
         # Close the pooled DB connections on the live loop before the event
         # loop itself goes down (clean shutdown in production; the same path
@@ -202,6 +214,15 @@ _OPENAPI_TAGS: list[dict[str, str]] = [
         "description": (
             "Admin panel: create/edit users without email confirmation and "
             "platform statistics. The last remaining admin cannot be demoted."
+        ),
+    },
+    {
+        "name": "push",
+        "description": (
+            "Web Push (AGENTS.md §2.14): the VAPID public key and the "
+            "subscribe/unsubscribe pair behind the Settings toggle. OS-level "
+            "notifications are delivered post-commit from the notification "
+            "emit path — no endpoint triggers a push."
         ),
     },
 ]
@@ -301,6 +322,7 @@ def create_app() -> FastAPI:
     app.include_router(balances_api.router)
     app.include_router(settlements_api.router)
     app.include_router(admin_api.router)
+    app.include_router(push_api.router)
     app.include_router(ws_api.router)  # WS /ws?token=...
 
     return app

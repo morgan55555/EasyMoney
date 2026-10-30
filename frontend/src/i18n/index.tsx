@@ -20,50 +20,13 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
-import { en, ru, type Dict, type Lang } from './locales'
+import { en, ru, makeT, browserLang, type Lang, type TFunc } from './core'
 
-export type TFunc = (key: string, params?: Record<string, string | number>) => string
-
-export interface PluralForms {
-  one: string
-  few?: string
-  many?: string
-  /** Optional: RU never selects 'other', so its dictionary omits it. */
-  other?: string
-}
-
-/** Pick the right word form for `n` in `locale` (en/ru rules via ICU). */
-export function pluralForm(locale: string, n: number, forms: PluralForms): string {
-  let category: string
-  try {
-    category = new Intl.PluralRules(locale).select(n)
-  } catch {
-    category = n === 1 ? 'one' : 'other'
-  }
-  if (category === 'one') return forms.one
-  if (category === 'few') return forms.few ?? forms.other ?? forms.one
-  if (category === 'many') return forms.many ?? forms.other ?? forms.one
-  return forms.other ?? forms.one
-}
-
-/**
- * Map a BCP-47 language tag to the app's UI language. Pure (unit-testable):
- * any Russian tag → 'ru', everything else (including empty/undefined) → 'en'.
- */
-export function browserLang(tag: string | undefined | null): Lang {
-  return tag && tag.toLowerCase().startsWith('ru') ? 'ru' : 'en'
-}
-
-function interpolate(template: string, params?: Record<string, string | number>): string {
-  if (!params) return template
-  return template.replace(/\{\{(\w+)\}\}/g, (match, name: string) =>
-    name in params ? String(params[name]) : match,
-  )
-}
-
-function makeT(dict: Dict): TFunc {
-  return (key, params) => interpolate(dict[key] ?? en[key] ?? key, params)
-}
+// The pure helpers (and the dictionaries they fall back to) live in the
+// React-free core (core.ts), shared with the service-worker build. Re-exported
+// here so existing importers of '../i18n' keep working.
+export { pluralForm, browserLang, makeT } from './core'
+export type { TFunc, PluralForms } from './core'
 
 export interface I18nValue {
   lang: Lang

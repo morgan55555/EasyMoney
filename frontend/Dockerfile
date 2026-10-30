@@ -6,7 +6,8 @@ COPY package.json package-lock.json* ./
 RUN npm install
 
 COPY . .
-RUN npm run build
+# The SPA, then the unhashed Web Push service worker (dist/sw.js, AGENTS.md §2.14).
+RUN npm run build && npm run build:sw
 
 # --- Runtime stage: serve static assets + proxy API/WS to the backend ---
 FROM nginx:1.27-alpine

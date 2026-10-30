@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -86,3 +87,29 @@ async def replicas():
         yield rs
     finally:
         await bus_util.close_replicas(rs)
+
+
+@pytest.fixture(scope="session")
+def api_client() -> Iterator[TestClient]:
+    """The real app (``create_app``) with its settings pointed at the test DB.
+
+    Session-scoped so the app's process-wide engine (``app.db.session``) is
+    created once, on one event loop, and shared by every DB-backed HTTP test
+    in the session — a per-module client would rebind the same engine to a
+    different loop and fail. Used as a context manager so the lifespan (WS
+    manager, scheduler) runs. The ``DATABASE_URL`` env is restored on teardown.
+    """
+    from app.core.config import get_settings
+    from app.main import create_app
+
+    original = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+    get_settings.cache_clear()
+    app = create_app()
+    with TestClient(app) as client:  # lifespan: ws manager + idle scheduler
+        yield client
+    if original is None:
+        os.environ.pop("DATABASE_URL", None)
+    else:
+        os.environ["DATABASE_URL"] = original
+    get_settings.cache_clear()

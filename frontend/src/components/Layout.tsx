@@ -13,6 +13,8 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { AUTH_EXPIRED_EVENT, clearTokens, getTokens } from '../api/client'
 import { authApi } from '../api/endpoints'
 import { useI18n } from '../i18n'
+import { useBrowserNotify } from '../lib/browserNotify'
+import { pushSupported, registerServiceWorker } from '../lib/push'
 import { useMe, bindSocket } from '../query/queries'
 import { socket } from '../ws/socket'
 import { AppIcon } from './AppIcon'
@@ -32,12 +34,22 @@ export function Layout() {
   const me = useMe()
   const { t } = useI18n()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const { enabled: notifyEnabled } = useBrowserNotify()
 
   useEffect(() => {
     bindSocket()
     socket.start()
     return () => socket.stop()
   }, [])
+
+  // Keep the Web Push service worker registered (and fresh) while the user has
+  // browser notifications turned on (AGENTS.md §2.14). Registration is quiet:
+  // it never raises a permission prompt — that only happens on the Settings
+  // toggle gesture.
+  useEffect(() => {
+    if (!notifyEnabled || !pushSupported()) return
+    void registerServiceWorker().catch(() => undefined)
+  }, [notifyEnabled])
 
   useEffect(() => {
     const onExpired = () => {

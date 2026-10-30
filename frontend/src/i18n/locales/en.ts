@@ -300,6 +300,7 @@ export const en: Dict = {
   'notif.view': 'View',
   'notif.groupClosed': 'The group was closed',
   'notif.groupReopened': 'The group was reopened',
+  'notif.appTitle': 'EasyMoney',
 
   // --- Receipts -----------------------------------------------------------------------------------------------------------------
   'receipt.view': 'View receipt',
@@ -395,6 +396,10 @@ export const en: Dict = {
   'settings.passwordError': 'Could not change the password',
   'settings.theme': 'Theme',
   'settings.themeHint': 'Follow your system, or pin light or dark.',
+  'settings.browserNotify': 'Browser notifications',
+  'settings.browserNotifyHint': 'Show a notification on your device when the app is in the background.',
+  'settings.browserNotifyDenied': 'Notifications are blocked for this site. Allow them in your browser settings.',
+  'settings.browserNotifyUnsupported': 'Browser notifications are not available in this browser.',
 
   // --- Verify email gate --------------------------------------------------------------------
   'verify.title': 'Confirm your email',

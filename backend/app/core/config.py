@@ -124,6 +124,17 @@ class Settings(BaseSettings):
     # realistic scan duration.
     scheduler_lock_ttl_s: int = 3300
 
+    # --- Web Push (AGENTS.md §2.14) ---
+    # VAPID key pair for OS-level push notifications. base64url, no padding.
+    # Both empty = Web Push disabled (the public-key endpoint 404s and the
+    # frontend shows the "unsupported" hint); generate them with
+    # ``backend/scripts/generate_vapid.py``.
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    # Contact for the VAPID "From" header; shown to the user by some browsers
+    # when they are asked to allow notifications.
+    vapid_subject: str = "mailto:admin@easymoney.local"
+
     # --- CORS ---
     # Stored as a raw string so pydantic-settings does not attempt JSON parsing;
     # the list is derived via the property below (comma-separated in the env).
@@ -153,6 +164,11 @@ class Settings(BaseSettings):
         switch and the dedicated toggle are both on. When off, the change is
         applied immediately."""
         return self.smtp_enabled and self.password_change_confirmation
+
+    @property
+    def push_enabled(self) -> bool:
+        """Web Push is live only with both VAPID keys configured (AGENTS.md §2.14)."""
+        return bool(self.vapid_public_key and self.vapid_private_key)
 
     @model_validator(mode="after")
     def _check_jwt_secret(self) -> Settings:

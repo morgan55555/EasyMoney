@@ -1,18 +1,34 @@
 /**
- * SettingsModal (AGENTS.md §2.13, §3.6, §6.2): profile (name/language), the
- * email-change flow (confirmation-pending notice vs. immediate "Email
- * changed."), the password-change flow (8-char minimum, result message) and
- * the theme segmented control (aria-pressed + persistence to localStorage).
- * Network is stubbed per request (client.ts only reads .ok/.status/.json()).
+ * SettingsModal (AGENTS.md §2.13, §2.14, §3.6, §6.2): profile (name/language),
+ * the email-change flow (confirmation-pending notice vs. immediate "Email
+ * changed."), the password-change flow (8-char minimum, result message), the
+ * theme segmented control (aria-pressed + persistence) and the
+ * browser-notifications toggle (Web Push gate: supported / denied /
+ * unsupported). Network is stubbed per request (client.ts only reads
+ * .ok/.status/.json()). The Web Push client (lib/push) is mocked here — the
+ * toggle logic is what is under test, and the push client's own behavior
+ * (SW registration, VAPID key decoding, subscribe/unsubscribe) is covered in
+ * lib/__tests__/push.test.ts.
  */
 
 import { createElement } from 'react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { QueryClient } from '@tanstack/react-query'
 
 import type { UserOut } from '../../types'
 import { keys } from '../../query/queries'
+import { disablePush, enablePush, pushSupported } from '../../lib/push'
 import { SettingsModal } from '../SettingsModal'
+
+vi.mock('../../lib/push', () => ({
+  pushSupported: vi.fn(),
+  enablePush: vi.fn(),
+  disablePush: vi.fn(),
+}))
+
+const pushSupportedMock = vi.mocked(pushSupported)
+const enablePushMock = vi.mocked(enablePush)
+const disablePushMock = vi.mocked(disablePush)
 import {
   render,
   typeInput,
@@ -58,12 +74,20 @@ function themeButton(root: ParentNode, text: string): HTMLButtonElement {
 let r: RenderResult | null = null
 beforeEach(() => {
   localStorage.removeItem('easymoney.theme')
+  localStorage.removeItem('easymoney.browserNotify')
+  // Web Push defaults: unsupported (toggle disabled with the unsupported
+  // hint), enable/disable inert. The toggle tests override what they need.
+  pushSupportedMock.mockReturnValue(false)
+  enablePushMock.mockResolvedValue('ok')
+  disablePushMock.mockResolvedValue(undefined)
 })
 afterEach(() => {
   r?.unmount()
   r = null
   localStorage.removeItem('easymoney.theme')
+  localStorage.removeItem('easymoney.browserNotify')
   document.documentElement.classList.remove('dark')
+  vi.clearAllMocks()
 })
 
 describe('SettingsModal', () => {
@@ -137,5 +161,73 @@ describe('SettingsModal', () => {
     } finally {
       stub.restore()
     }
+  })
+
+  describe('browser notifications toggle (§2.14)', () => {
+    it('is disabled with an unsupported hint when the browser cannot do Web Push', () => {
+      r = render(createElement(SettingsModal, { open: true, onClose: () => undefined }), {
+        seed,
+        theme: true,
+        notify: true,
+      })
+      const box = labeledInput(r.body, 'Browser notifications')
+      expect(box.disabled).toBe(true)
+      expect(hasText(r.body, 'Browser notifications are not available in this browser.')).toBe(true)
+    })
+
+    it('toggles the persisted preference on/off when enabling succeeds', async () => {
+      pushSupportedMock.mockReturnValue(true)
+      enablePushMock.mockResolvedValue('ok')
+      r = render(createElement(SettingsModal, { open: true, onClose: () => undefined }), {
+        seed,
+        theme: true,
+        notify: true,
+      })
+      const box = labeledInput(r.body, 'Browser notifications')
+      expect(box.disabled).toBe(false)
+      expect(box.checked).toBe(false)
+      click(box)
+      await flush()
+      expect(enablePushMock).toHaveBeenCalledTimes(1)
+      expect(box.checked).toBe(true)
+      expect(localStorage.getItem('easymoney.browserNotify')).toBe('on')
+      click(box)
+      await flush()
+      expect(disablePushMock).toHaveBeenCalledTimes(1)
+      expect(box.checked).toBe(false)
+      expect(localStorage.getItem('easymoney.browserNotify')).toBe('off')
+    })
+
+    it('stays off and shows the denied hint when the permission prompt is refused', async () => {
+      pushSupportedMock.mockReturnValue(true)
+      enablePushMock.mockResolvedValue('denied')
+      r = render(createElement(SettingsModal, { open: true, onClose: () => undefined }), {
+        seed,
+        theme: true,
+        notify: true,
+      })
+      const box = labeledInput(r.body, 'Browser notifications')
+      click(box)
+      await flush()
+      expect(box.checked).toBe(false)
+      expect(localStorage.getItem('easymoney.browserNotify')).not.toBe('on')
+      expect(hasText(r.body, 'Notifications are blocked for this site.')).toBe(true)
+    })
+
+    it('stays off and shows the unsupported hint when push cannot be enabled (e.g. VAPID 404)', async () => {
+      pushSupportedMock.mockReturnValue(true)
+      enablePushMock.mockResolvedValue('unsupported')
+      r = render(createElement(SettingsModal, { open: true, onClose: () => undefined }), {
+        seed,
+        theme: true,
+        notify: true,
+      })
+      const box = labeledInput(r.body, 'Browser notifications')
+      click(box)
+      await flush()
+      expect(box.checked).toBe(false)
+      expect(localStorage.getItem('easymoney.browserNotify')).not.toBe('on')
+      expect(hasText(r.body, 'Browser notifications are not available in this browser.')).toBe(true)
+    })
   })
 })

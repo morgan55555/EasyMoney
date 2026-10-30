@@ -86,6 +86,12 @@ services:
       # `redis` service so multiple backend replicas can scale behind the
       # frontend's load balancer. Empty = single-process local mode.
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      # Web Push VAPID keys (AGENTS.md §2.14). Empty = Web Push disabled —
+      # the one-command launch works with no setup; the Settings toggle shows
+      # the "unsupported" hint. Generate with backend/scripts/generate_vapid.py.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@easymoney.local}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8081}
     # The backend is reached via the frontend on :8081 (nginx proxies /api
     # and /ws here). To expose it directly on the host for curl/debugging,

@@ -29,6 +29,8 @@ import type {
   NotificationListOut,
   ParticipantIn,
   PasswordChangeResponse,
+  PushSubscriptionJson,
+  PushVapidKeyOut,
   RegisterRequest,
   SettlementOut,
   TokenResponse,
@@ -181,6 +183,18 @@ export const feedApi = {
     if (cursor) params.set('cursor', cursor)
     return apiFetch<ActivityPageOut>(`/api/groups/${groupId}/activity?${params.toString()}`)
   },
+}
+
+export const pushApi = {
+  /** Public (no auth): the VAPID public key; 404 when push is disabled. */
+  vapidPublicKey: () =>
+    apiFetch<PushVapidKeyOut>('/api/push/vapid-public-key', undefined, { isAuthCall: true }),
+  /** Upsert the caller's subscription by (user, endpoint). Authed, 204. */
+  subscribe: (sub: PushSubscriptionJson) =>
+    apiFetch<void>('/api/push/subscribe', { method: 'POST', body: JSON.stringify(sub) }),
+  /** Forget one subscription by endpoint. Authed, idempotent 204. */
+  unsubscribe: (endpoint: string) =>
+    apiFetch<void>('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }),
 }
 
 export { ParticipantIn }
