@@ -15,6 +15,8 @@ Covered:
     with a correct fresh ``group_balances`` snapshot (sum zero on the wire);
   * the bell: participants get ``notification.created`` (one row per user),
     non-participants do not;
+  * deleting an expense bell-notifies its participants with an
+    ``expense.deleted`` row (a member who was not a participant gets none);
   * a socket subscribed to a different group receives none of it;
   * dynamic re-subscribe: a user who joins mid-session (link invite accepted)
     starts receiving events on their existing open socket;
@@ -31,10 +33,15 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.orm import joinedload
 
+from app.models.expense import Expense
+from app.models.expense_participant import ExpenseParticipant
 from app.models.group import Group
 from app.models.membership import Membership
+from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.expenses import ExpenseCreate, ParticipantIn
 from app.services import expenses as expenses_service
@@ -282,5 +289,115 @@ async def _run(factory: async_sessionmaker, manager: ConnectionManager) -> None:
         assert _of_type(sock, "notification.read") == []
 
 
+async def _delete_notifies_participants_scenario(factory: async_sessionmaker) -> None:
+    """§2.6: deleting an expense bell-notifies its participants (payer ∪
+    participants; the deleter included when involved) with an
+    ``expense.deleted`` row, and no one else. The post-commit
+    ``notification.created`` fan-out carries the deletion payload; the rows
+    persist for the bell's REST read."""
+    manager = ConnectionManager()
+    ws_hook.set_manager(manager)
+    try:
+        # alice (creator + payer), bob (participant), carol (member, but not a
+        # participant of the expense that gets deleted).
+        async with factory() as db:
+            for uid in (ALICE, BOB, CAROL):
+                db.add(
+                    User(
+                        id=uid,
+                        email=f"u{uid}@test.local",
+                        password_hash="not-a-real-hash",
+                        display_name=f"User {uid}",
+                    )
+                )
+            await db.commit()
+
+        alice_tab = FakeSocket()
+        bob_tab = FakeSocket()
+        carol_tab = FakeSocket()
+        manager.connect(alice_tab, ALICE)
+        manager.connect(bob_tab, BOB)
+        manager.connect(carol_tab, CAROL)
+
+        async with factory() as db:
+            alice = await db.get(User, ALICE)
+            assert alice is not None
+            group = await groups_service.create_group(db, alice, "Trip", "EUR")
+            for uid in (BOB, CAROL):
+                db.add(Membership(group_id=group.id, user_id=uid))
+            await db.commit()
+            group_id = group.id
+        manager.subscribe_group(bob_tab, group_id)
+        manager.subscribe_group(carol_tab, group_id)
+
+        # Expense paid by alice, split between alice and bob; carol is left out.
+        async with factory() as db:
+            group = await db.get(Group, group_id)
+            alice = await db.get(User, ALICE)
+            assert group is not None and alice is not None
+            expense = await expenses_service.create_expense(
+                db,
+                group,
+                alice,
+                ExpenseCreate(
+                    payer_id=ALICE,
+                    description="dinner",
+                    amount=Decimal("30.00"),
+                    split_method="equal",
+                    date=date(2026, 10, 26),
+                    participants=[ParticipantIn(user_id=ALICE), ParticipantIn(user_id=BOB)],
+                ),
+            )
+            expense_id = expense.id
+
+        # Delete through the service, loading the expense the way the router
+        # does (group + participants eager) so the participant set is present.
+        async with factory() as db:
+            alice = await db.get(User, ALICE)
+            assert alice is not None
+            expense = (
+                await db.execute(
+                    select(Expense)
+                    .options(
+                        joinedload(Expense.group),
+                        joinedload(Expense.payer),
+                        joinedload(Expense.participants).joinedload(ExpenseParticipant.user),
+                        joinedload(Expense.attachment),
+                    )
+                    .where(Expense.id == expense_id)
+                )
+            ).scalars().unique().one()
+            await expenses_service.delete_expense(db, expense, alice)
+
+        # Both participants' tabs learn of the deletion through the bell ...
+        for sock in (alice_tab, bob_tab):
+            notes = [
+                e["data"]
+                for e in _of_type(sock, "notification.created", group_id)
+                if e["data"]["type"] == "expense.deleted"
+            ]
+            assert len(notes) == 1
+            assert notes[0]["payload"]["description"] == "dinner"
+        # ... and no one else: carol was a member but not a participant.
+        assert _of_type(carol_tab, "notification.created", group_id) == []
+
+        # The rows persist (one per participant) for the bell's REST read.
+        async with factory() as db:
+            rows = (
+                await db.execute(
+                    select(Notification.user_id)
+                    .where(Notification.type == "expense.deleted")
+                    .order_by(Notification.user_id)
+                )
+            ).all()
+            assert [uid for (uid,) in rows] == [ALICE, BOB]
+    finally:
+        ws_hook.set_manager(None)
+
+
 def test_ws_multiuser(run_db) -> None:
     run_db(_scenario)
+
+
+def test_delete_notifies_participants(run_db) -> None:
+    run_db(_delete_notifies_participants_scenario)

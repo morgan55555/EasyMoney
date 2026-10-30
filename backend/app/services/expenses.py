@@ -14,7 +14,8 @@ Rules implemented here (the routers stay thin):
   excluded from every balance sum (invariant 4 does the rest). The receipt
   dies with the expense: its row goes in the same transaction, the object is
   removed from the store (app.services.storage) post-commit (a missing object
-  is ignored).
+  is ignored). The participants are bell-notified of the deletion (§2.6), the
+  same set as create/update.
 
 Each mutation happens in one transaction: state change + feed row +
 notification rows; the WS push goes out post-commit through ``app.ws.hook``
@@ -389,10 +390,18 @@ async def delete_expense(db: AsyncSession, expense: Expense, user: User) -> None
         ref_id=expense.id,
         payload=payload,
     )
+    # §2.6: the participants are bell-notified of the deletion, exactly like
+    # expense.created / expense.updated. The payer is always a participant, so
+    # this set covers payer ∪ participants; the actor (deleter) is included
+    # when they were involved, and a non-participant owner is not.
+    notifications = await notifications_service.notify_users(
+        db, {p.user_id for p in expense.participants}, "expense.deleted", payload
+    )
     await db.commit()
     if receipt_key is not None:
         await storage_service.get_store().delete(receipt_key)
     await ws_hook.emit_group(db, group, "expense.deleted", payload)
+    await ws_hook.emit_notifications(group.id, notifications)
 
 
 # --- Receipts (§3.5) ---------------------------------------------------------

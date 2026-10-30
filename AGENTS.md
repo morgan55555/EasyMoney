@@ -96,6 +96,7 @@ Note: balances move only on confirmation, and they are computed on read, so if t
 |---|---|
 | Expense created | payer ∪ all participants (dedup) |
 | Expense updated | same set, computed from the updated expense |
+| Expense deleted | same set, computed from the deleted expense (the feed row stays, §2.5; the receipt dies with it, §3.5) |
 | Settlement proposed | sender + recipient |
 | Settlement confirmed / rejected / cancelled | sender + recipient |
 | Member joined / left | all members **except the actor** (a user is never notified about their own join/leave) |
