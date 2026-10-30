@@ -60,6 +60,7 @@ describe('BalancesPanel', () => {
               { from_user_id: 1, to_user_id: 3, amount: '20.00' },
             ],
           })
+          qc.setQueryData(keys.settlements(GROUP), [])
         },
       },
     )
@@ -97,6 +98,7 @@ describe('BalancesPanel', () => {
             pairs: [],
             transfers: [],
           })
+          qc.setQueryData(keys.settlements(GROUP), [])
         },
       },
     )
@@ -122,6 +124,7 @@ describe('BalancesPanel', () => {
             pairs: [],
             transfers: [],
           })
+          qc.setQueryData(keys.settlements(GROUP), [])
         },
       },
     )

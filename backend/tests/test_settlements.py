@@ -8,6 +8,9 @@ Covered:
   * proposals validate against the current pairwise view — 422 when the
     sender owes nothing to the recipient, exceeds the debt, names a
     non-member or themselves, or is finer than the currency's minor unit;
+  * the max sendable sum decreases with the sender's pending proposals to
+    the same recipient and is released by confirm/reject/cancel (per
+    recipient);
   * only the recipient confirms/rejects, only the sender cancels (Forbidden);
   * transitions are terminal — any second transition is a Conflict (409),
     including the two-concurrent-confirms race (exactly one wins);
@@ -112,18 +115,81 @@ async def _proposal_scenario(factory: async_sessionmaker) -> None:
             db, group, users[CAROL], SettlementCreate(to_user_id=ALICE, amount=Decimal("1.00"))
         )
         assert partial.state == "pending"
-        # pending settlements do not shrink the cap: balances are unchanged
+        # pending proposals eat into the headroom (§2.4): carol's 1.00 is
+        # pending, so she may propose exactly the remaining 32.33 — not a
+        # cent more — and bob's headroom is fully taken by his 33.33
         again = await settlements_service.create_settlement(
-            db, group, users[CAROL], SettlementCreate(to_user_id=ALICE, amount=Decimal("33.33"))
+            db, group, users[CAROL], SettlementCreate(to_user_id=ALICE, amount=Decimal("32.33"))
         )
         assert again.state == "pending"
-        # closed groups still accept settlements (§2.9)
+        with pytest.raises(ValidationFailed):
+            await settlements_service.create_settlement(
+                db, group, users[CAROL], SettlementCreate(to_user_id=ALICE, amount=Decimal("0.01"))
+            )
+        with pytest.raises(ValidationFailed):
+            await settlements_service.create_settlement(
+                db, group, users[BOB], SettlementCreate(to_user_id=ALICE, amount=Decimal("0.01"))
+            )
+        # a terminal transition releases the headroom: alice rejects bob's
+        # full proposal and he can propose again (even in a closed group,
+        # §2.9)
+        rejected = await settlements_service.reject_settlement(db, full, users[ALICE])
+        assert rejected.state == "rejected"
         group.status = "closed"
         await db.commit()
         ok = await settlements_service.create_settlement(
             db, group, users[BOB], SettlementCreate(to_user_id=ALICE, amount=Decimal("5.00"))
         )
         assert ok.state == "pending"
+
+
+async def _pending_cap_scenario(factory: async_sessionmaker) -> None:
+    """§2.4: the max sendable sum decreases with the sender's pending
+    proposals to the same recipient; every terminal transition releases the
+    headroom; the cap is per recipient (bob's pending does not touch
+    carol's)."""
+    group, users = await _setup_group(factory)
+    async with factory() as db:
+        # bob owes alice 33.33: two proposals that together exactly fill the
+        # debt are fine, the third minor unit is not
+        first = await settlements_service.create_settlement(
+            db, group, users[BOB], SettlementCreate(to_user_id=ALICE, amount=Decimal("20.00"))
+        )
+        second = await settlements_service.create_settlement(
+            db, group, users[BOB], SettlementCreate(to_user_id=ALICE, amount=Decimal("13.33"))
+        )
+        assert (first.state, second.state) == ("pending", "pending")
+        with pytest.raises(ValidationFailed):
+            await settlements_service.create_settlement(
+                db, group, users[BOB], SettlementCreate(to_user_id=ALICE, amount=Decimal("0.01"))
+            )
+        # the cap is per recipient: carol is unaffected by bob's proposals
+        carol = await settlements_service.create_settlement(
+            db, group, users[CAROL], SettlementCreate(to_user_id=ALICE, amount=Decimal("33.33"))
+        )
+        assert carol.state == "pending"
+        # confirm releases: alice confirms bob's 20.00 — his debt falls to
+        # 13.33, which his still-pending 13.33 now covers entirely
+        await settlements_service.confirm_settlement(db, first, users[ALICE])
+        with pytest.raises(ValidationFailed):
+            await settlements_service.create_settlement(
+                db, group, users[BOB], SettlementCreate(to_user_id=ALICE, amount=Decimal("0.01"))
+            )
+        # cancel releases: bob cancels his 13.33, and the same amount is
+        # proposal-able again (debt 13.33, no pending)
+        cancelled = await settlements_service.cancel_settlement(db, second, users[BOB])
+        assert cancelled.state == "cancelled"
+        re_proposed = await settlements_service.create_settlement(
+            db, group, users[BOB], SettlementCreate(to_user_id=ALICE, amount=Decimal("13.33"))
+        )
+        assert re_proposed.state == "pending"
+        # and reject releases too
+        rejected = await settlements_service.reject_settlement(db, re_proposed, users[ALICE])
+        assert rejected.state == "rejected"
+        third = await settlements_service.create_settlement(
+            db, group, users[BOB], SettlementCreate(to_user_id=ALICE, amount=Decimal("13.33"))
+        )
+        assert third.state == "pending"
 
 
 async def _lifecycle_scenario(factory: async_sessionmaker) -> None:
@@ -283,6 +349,10 @@ async def _feed_notifications_scenario(factory: async_sessionmaker) -> None:
 
 def test_proposal_validation(run_db):
     run_db(_proposal_scenario)
+
+
+def test_pending_cap(run_db):
+    run_db(_pending_cap_scenario)
 
 
 def test_lifecycle_permissions_and_terminality(run_db):

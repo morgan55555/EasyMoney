@@ -15,7 +15,7 @@ import { useMemo, useState } from 'react'
 
 import { useI18n } from '../i18n'
 import { formatMoney, formatSigned } from '../lib/money'
-import { useGroupBalances, useMe } from '../query/queries'
+import { useGroupBalances, useMe, useSettlements } from '../query/queries'
 import { balanceClass, Button, Card, CardHeader, EmptyState, Spinner } from './ui'
 import { Avatar } from './Avatar'
 import { ProposeModal } from './ProposeModal'
@@ -23,8 +23,11 @@ import { ProposeModal } from './ProposeModal'
 export function BalancesPanel({ groupId }: { groupId: number }) {
   const balances = useGroupBalances(groupId)
   const me = useMe()
+  const settlements = useSettlements(groupId)
   const { t, locale } = useI18n()
   const [proposeTo, setProposeTo] = useState<{ to: number; amount: string } | null>(null)
+
+  const meId = me.data?.id ?? -1
 
   const nameById = useMemo(
     () =>
@@ -42,12 +45,17 @@ export function BalancesPanel({ groupId }: { groupId: number }) {
     [balances.data],
   )
 
+  // §2.4: my still-pending proposals reduce the proposal cap per recipient.
+  const myPending = useMemo(
+    () => (settlements.data ?? []).filter((s) => s.state === 'pending' && s.from_user_id === meId),
+    [settlements.data, meId],
+  )
+
   if (balances.isPending) return <Spinner label={t('balances.loading')} />
 
   const data = balances.data
   if (!data) return null
 
-  const meId = me.data?.id ?? -1
   const myBalance = data.balances.find((b) => b.user_id === meId)?.balance ?? '0'
   const settled = data.balances.every((b) => Number(b.balance.replace(/,/g, '')) === 0)
 
@@ -196,6 +204,7 @@ export function BalancesPanel({ groupId }: { groupId: number }) {
           groupId={groupId}
           meId={meId}
           balances={data}
+          myPending={myPending}
           initialTo={proposeTo.to || undefined}
           initialAmount={proposeTo.amount || undefined}
           onClose={() => setProposeTo(null)}

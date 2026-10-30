@@ -75,12 +75,12 @@ States: `pending → confirmed | rejected | cancelled` (all three terminal).
 
 | Transition | Who | Effect |
 |---|---|---|
-| create `pending` | debtor (any member who owes the recipient in the current pairwise view) | Validated at proposal: `amount > 0` and `amount ≤ pairwise_debt(from → to)` (else 422). No balance effect. Both parties see it as *pending* (in-app + WebSocket). |
+| create `pending` | debtor (any member who owes the recipient in the current pairwise view) | Validated at proposal: `amount > 0` and `amount ≤ pairwise_debt(from → to) − Σ pending proposals (from → to, same group)` (else 422). The sender's still-pending proposals to the same recipient eat into the headroom, so stacked proposals can never exceed the current pairwise debt — the max sendable sum decreases with every active proposal. No balance effect. Both parties see it as *pending* (in-app + WebSocket). |
 | `→ confirmed` | recipient only | The amount is applied to balances (from +, to −). Both parties notified. |
 | `→ rejected` | recipient only | Terminal. Sender notified. |
 | `→ cancelled` | sender only | Terminal. Recipient notified. |
 
-Note: balances move only on confirmation, and they are computed on read, so if the debt shrinks between proposal and confirmation (someone else settled, an expense was edited/deleted), the confirmed payment is still applied in full and may create a **reverse debt** — that is correct: the money really moved.
+Note: balances move only on confirmation, and they are computed on read, so if the debt shrinks between proposal and confirmation (someone else settled, an expense was edited/deleted), the confirmed payment is still applied in full and may create a **reverse debt** — that is correct: the money really moved. The pending-headroom cap is a proposal-time guard only: it bounds what may be *proposed* (any terminal transition — confirm/reject/cancel — releases the headroom that proposal was holding), never what may be *confirmed* (no re-validation at confirmation).
 
 ### 2.5 Editing / deleting expenses
 

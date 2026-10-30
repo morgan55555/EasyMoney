@@ -3,8 +3,12 @@
 State machine: ``pending -> confirmed | rejected | cancelled`` (all terminal).
 
 * Proposals validate against the **current pairwise view**: the sender must
-  owe the recipient in the group, and the amount may not exceed that debt.
-  If the debt shrinks before confirmation (someone else paid, an expense was
+  owe the recipient in the group, and the amount may not exceed that debt
+  *minus the sender's still-pending proposals to the same recipient* — the
+  max sendable sum decreases with every active proposal, so stacked
+  proposals can never exceed the pairwise debt (§2.4). A terminal
+  transition (confirm/reject/cancel) releases the headroom again. If the
+  debt shrinks before confirmation (someone else paid, an expense was
   edited or deleted), the confirmed amount still applies in full — the money
   really moved (§2.4 note); no re-validation at confirmation.
 * Transitions are guarded by ``WHERE state = 'pending'``: with two
@@ -22,9 +26,10 @@ fresh balance snapshot in every group event.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any, cast
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -90,13 +95,31 @@ async def _load_settlement(db: AsyncSession, settlement_id: int) -> Settlement:
     return result.scalars().unique().one()
 
 
+async def _pending_sum(
+    db: AsyncSession, group_id: int, from_user_id: int, to_user_id: int
+) -> Decimal:
+    """Total of the sender's still-pending proposals to this recipient in this
+    group (§2.4). Terminal proposals (confirmed/rejected/cancelled) no longer
+    count, so their headroom is already released."""
+    total = await db.scalar(
+        select(func.coalesce(func.sum(Settlement.amount), 0)).where(
+            Settlement.group_id == group_id,
+            Settlement.from_user_id == from_user_id,
+            Settlement.to_user_id == to_user_id,
+            Settlement.state == "pending",
+        )
+    )
+    return Decimal(0) if total is None else total
+
+
 async def create_settlement(
     db: AsyncSession, group: Group, user: User, data: SettlementCreate
 ) -> Settlement:
     """§2.4: the debtor proposes a (partial) payment to a creditor.
 
-    Validated against the current pairwise view (422 otherwise); pending has
-    no balance effect. Notifies sender + recipient, writes the feed row.
+    Validated against the current pairwise view minus the sender's own
+    still-pending proposals to the same recipient (422 otherwise); pending
+    has no balance effect. Notifies sender + recipient, writes the feed row.
     """
     if data.to_user_id == user.id:
         raise ValidationFailed("You cannot settle a debt with yourself")
@@ -119,8 +142,14 @@ async def create_settlement(
     )
     if pair is None:
         raise ValidationFailed("You do not owe this member anything right now")
-    if data.amount > pair.amount:
-        raise ValidationFailed("The amount is greater than the debt you owe this member")
+    # The sender's still-pending proposals to this recipient already hold
+    # headroom; the new amount may only fill what is left (§2.4).
+    available = pair.amount - await _pending_sum(db, group.id, user.id, data.to_user_id)
+    if data.amount > available:
+        raise ValidationFailed(
+            "The amount is greater than what you can still propose to this "
+            "member (your pending proposals already cover the rest of the debt)"
+        )
 
     settlement = Settlement(
         group_id=group.id,

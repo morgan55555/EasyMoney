@@ -174,6 +174,7 @@ export function SettlementsPanel({ groupId, focusId = null }: { groupId: number;
           groupId={groupId}
           meId={meId}
           balances={balances.data}
+          myPending={pending.filter((s) => s.from_user_id === meId)}
           onClose={() => setShowPropose(false)}
         />
       ) : null}
