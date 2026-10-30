@@ -79,6 +79,8 @@ function installGlobals(opts: {
   serviceWorker?: boolean
   pushManager?: boolean
   notification?: boolean
+  /** The static `Notification.permission` the stand-in reports (default 'default'). */
+  notificationPermission?: NotificationPermission
   register?: (url: string) => Promise<ServiceWorkerRegistration>
   getRegistration?: () => Promise<ServiceWorkerRegistration | undefined>
 }): { register: Mock; getRegistration: Mock } {
@@ -103,8 +105,12 @@ function installGlobals(opts: {
     })
   }
   if (opts.notification) {
+    const Notif = class Notification {} as unknown as {
+      permission: NotificationPermission
+    }
+    Notif.permission = opts.notificationPermission ?? 'default'
     Object.defineProperty(window, 'Notification', {
-      value: class Notification {},
+      value: Notif,
       configurable: true,
       writable: true,
     })
@@ -366,5 +372,91 @@ describe('disablePush', () => {
     await push.disablePush()
 
     expect(pushApi.unsubscribe).not.toHaveBeenCalled()
+  })
+})
+
+describe('reconcilePush (re-confirms the subscription on load, §2.14)', () => {
+  it('re-POSTs the existing subscription to the server without calling subscribe()', async () => {
+    const sub = makeSubscription('https://push.example/reload')
+    const { reg, subscribe } = makeRegistration(sub)
+    installGlobals({ ...ALL, register: async () => reg })
+    const { push, pushApi } = await loadPush()
+    pushApi.subscribe.mockResolvedValue(undefined)
+
+    await push.reconcilePush()
+
+    // The current endpoint is re-POSTed (an idempotent upsert server-side)…
+    expect(pushApi.subscribe).toHaveBeenCalledTimes(1)
+    expect(pushApi.subscribe).toHaveBeenCalledWith({
+      endpoint: sub.endpoint,
+      keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+    })
+    // …without creating a new one — no subscribe, no VAPID fetch, no prompt.
+    expect(subscribe).not.toHaveBeenCalled()
+    expect(pushApi.vapidPublicKey).not.toHaveBeenCalled()
+  })
+
+  it('recreates a missing subscription when permission is granted, then stores it', async () => {
+    const newSub = makeSubscription('https://push.example/fresh')
+    const { reg, subscribe } = makeRegistration(null, async () => newSub)
+    installGlobals({ ...ALL, register: async () => reg, notificationPermission: 'granted' })
+    const { push, pushApi } = await loadPush()
+    pushApi.vapidPublicKey.mockResolvedValue({ key: 'a2V5' })
+    pushApi.subscribe.mockResolvedValue(undefined)
+
+    await push.reconcilePush()
+
+    expect(subscribe).toHaveBeenCalledTimes(1)
+    expect(pushApi.vapidPublicKey).toHaveBeenCalledTimes(1)
+    expect(pushApi.subscribe).toHaveBeenCalledTimes(1)
+    expect(pushApi.subscribe).toHaveBeenCalledWith({
+      endpoint: newSub.endpoint,
+      keys: { p256dh: newSub.keys.p256dh, auth: newSub.keys.auth },
+    })
+  })
+
+  it('does nothing when there is no subscription and permission is not granted', async () => {
+    const { reg, subscribe } = makeRegistration(null)
+    installGlobals({ ...ALL, register: async () => reg, notificationPermission: 'default' })
+    const { push, pushApi } = await loadPush()
+
+    await push.reconcilePush()
+
+    expect(subscribe).not.toHaveBeenCalled()
+    expect(pushApi.vapidPublicKey).not.toHaveBeenCalled()
+    expect(pushApi.subscribe).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op when the browser lacks Web Push', async () => {
+    const { push, pushApi } = await loadPush()
+
+    await push.reconcilePush()
+
+    expect(pushApi.subscribe).not.toHaveBeenCalled()
+    expect(pushApi.vapidPublicKey).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op (and does not throw) when the service worker fails to register', async () => {
+    installGlobals({
+      ...ALL,
+      register: async () => {
+        throw new Error('Service Worker registration failed')
+      },
+    })
+    const { push, pushApi } = await loadPush()
+
+    await expect(push.reconcilePush()).resolves.toBeUndefined()
+    expect(pushApi.subscribe).not.toHaveBeenCalled()
+  })
+
+  it('swallows a server store failure (never throws)', async () => {
+    const sub = makeSubscription()
+    const { reg } = makeRegistration(sub)
+    installGlobals({ ...ALL, register: async () => reg })
+    const { push, pushApi } = await loadPush()
+    pushApi.subscribe.mockRejectedValue(new Error('500 Internal Server Error'))
+
+    await expect(push.reconcilePush()).resolves.toBeUndefined()
+    expect(pushApi.subscribe).toHaveBeenCalledTimes(1)
   })
 })

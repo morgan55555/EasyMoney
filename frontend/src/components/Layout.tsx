@@ -14,7 +14,7 @@ import { AUTH_EXPIRED_EVENT, clearTokens, getTokens } from '../api/client'
 import { authApi } from '../api/endpoints'
 import { useI18n } from '../i18n'
 import { useBrowserNotify } from '../lib/browserNotify'
-import { pushSupported, registerServiceWorker } from '../lib/push'
+import { pushSupported, reconcilePush } from '../lib/push'
 import { useMe, bindSocket } from '../query/queries'
 import { socket } from '../ws/socket'
 import { AppIcon } from './AppIcon'
@@ -42,13 +42,15 @@ export function Layout() {
     return () => socket.stop()
   }, [])
 
-  // Keep the Web Push service worker registered (and fresh) while the user has
-  // browser notifications turned on (AGENTS.md §2.14). Registration is quiet:
-  // it never raises a permission prompt — that only happens on the Settings
-  // toggle gesture.
+  // Keep Web Push alive while the user has browser notifications turned on
+  // (AGENTS.md §2.14): on every load (and on a cross-tab turn-on) re-register
+  // the service worker AND re-confirm the subscription server-side, so a reload
+  // can never leave a stale/dead endpoint behind. Reconciliation is quiet — it
+  // never raises a permission prompt (that only happens on the Settings toggle
+  // gesture).
   useEffect(() => {
     if (!notifyEnabled || !pushSupported()) return
-    void registerServiceWorker().catch(() => undefined)
+    void reconcilePush().catch(() => undefined)
   }, [notifyEnabled])
 
   useEffect(() => {
