@@ -15,6 +15,12 @@
  * inform the user (no double-alerting); with no clients at all (app closed)
  * the notification shows. The push-permission prompt is raised only inside the
  * Settings-toggle gesture (lib/push.enablePush) — never here, never on load.
+ *
+ * Updates take over immediately (install → skipWaiting, activate →
+ * clients.claim): without that a redeployed worker would sit "waiting" until
+ * every tab in the scope is closed, and the stale worker's older click logic
+ * would keep handling notifications — the bug where a newly added deep link
+ * silently did nothing on click.
  */
 
 import { en, ru, makeT, type Dict, type Lang } from '../i18n/core'
@@ -104,6 +110,20 @@ async function focusAndNavigate(url: string | undefined): Promise<void> {
   await client.focus()
   if (url) await client.navigate(url)
 }
+
+// Lifecycle: a rebuilt worker must take over at once. Without skipWaiting a
+// new worker stays "waiting" until every tab in the scope is closed, so after
+// a redeploy the stale worker (with older push/click logic) keeps handling
+// events — e.g. a notification deep link the old worker didn't know about
+// silently does nothing on click. skipWaiting + claim() hand existing pages to
+// the new worker immediately. Safe here: this worker only handles push +
+// notificationclick (no fetch interception).
+scope.addEventListener('install', (event: ExtendableEvent) => {
+  event.waitUntil(scope.skipWaiting())
+})
+scope.addEventListener('activate', () => {
+  scope.clients.claim()
+})
 
 scope.addEventListener('push', (event: PushEvent) => {
   let data: PushPayload | null = null

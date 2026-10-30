@@ -20,7 +20,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 type Handler = (event: unknown) => void
 
-const captured: { push?: Handler; click?: Handler } = {}
+const captured: { push?: Handler; click?: Handler; install?: Handler; activate?: Handler } = {}
 
 let addEventListenerSpy: Mock
 const origAddEventListener = window.addEventListener
@@ -30,6 +30,8 @@ function captureListeners(): void {
     const fn = listener as Handler
     if (type === 'push') captured.push = fn
     if (type === 'notificationclick') captured.click = fn
+    if (type === 'install') captured.install = fn
+    if (type === 'activate') captured.activate = fn
   })
   window.addEventListener = addEventListenerSpy as unknown as typeof window.addEventListener
 }
@@ -38,13 +40,16 @@ async function importSw(): Promise<void> {
   vi.resetModules()
   captured.push = undefined
   captured.click = undefined
+  captured.install = undefined
+  captured.activate = undefined
   captureListeners()
   await import('../sw')
 }
 
 interface WinFakes {
-  clients: { matchAll: Mock; openWindow: Mock }
+  clients: { matchAll: Mock; openWindow: Mock; claim: Mock }
   registration: { showNotification: Mock }
+  skipWaiting: Mock
 }
 
 function installFakes(clients: Array<Record<string, unknown>> = []): WinFakes {
@@ -52,11 +57,14 @@ function installFakes(clients: Array<Record<string, unknown>> = []): WinFakes {
     clients: {
       matchAll: vi.fn(async () => clients),
       openWindow: vi.fn(async () => ({})),
+      claim: vi.fn(),
     },
     registration: { showNotification: vi.fn(async () => ({})) },
+    skipWaiting: vi.fn(async () => undefined),
   }
   ;(window as unknown as { clients: unknown }).clients = fakes.clients
   ;(window as unknown as { registration: unknown }).registration = fakes.registration
+  ;(window as unknown as { skipWaiting: unknown }).skipWaiting = fakes.skipWaiting
   return fakes
 }
 
@@ -102,6 +110,7 @@ afterEach(() => {
   window.addEventListener = origAddEventListener
   delete (window as unknown as { clients?: unknown }).clients
   delete (window as unknown as { registration?: unknown }).registration
+  delete (window as unknown as { skipWaiting?: unknown }).skipWaiting
 })
 
 describe('push handler', () => {
@@ -209,5 +218,30 @@ describe('notificationclick handler', () => {
 
     await waitUntil.mock.calls[0][0]
     expect(fakes.clients.openWindow).toHaveBeenCalledWith('/')
+  })
+})
+
+describe('install / activate (a rebuilt worker takes over at once, §2.14)', () => {
+  it('skips the waiting state on install so a redeployed worker activates immediately', async () => {
+    await importSw()
+    const fakes = installFakes()
+    const waitUntil: Mock = vi.fn()
+
+    captured.install!({ waitUntil })
+
+    expect(waitUntil).toHaveBeenCalledTimes(1)
+    await waitUntil.mock.calls[0][0]
+    expect(fakes.skipWaiting).toHaveBeenCalledTimes(1)
+  })
+
+  it('claims existing clients on activate so open pages switch to the new worker', async () => {
+    await importSw()
+    const fakes = installFakes()
+    const waitUntil: Mock = vi.fn()
+
+    captured.activate!({ waitUntil })
+
+    // claim() is synchronous, so it runs as the handler executes.
+    expect(fakes.clients.claim).toHaveBeenCalledTimes(1)
   })
 })
