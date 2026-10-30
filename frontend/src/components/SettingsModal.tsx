@@ -149,7 +149,12 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
   // checkbox is controlled locally so it reverts to off when the permission
   // prompt is denied, or when push can't be enabled (no Web Push in the
   // browser, or the server has push disabled — the VAPID endpoint 404s).
-  const { enabled: notifyEnabled, setEnabled: setNotifyEnabled } = useBrowserNotify()
+  const {
+    enabled: notifyEnabled,
+    setEnabled: setNotifyEnabled,
+    whileVisible,
+    setWhileVisible,
+  } = useBrowserNotify()
   const [notifyChecked, setNotifyChecked] = useState(notifyEnabled)
   const [notifyBusy, setNotifyBusy] = useState(false)
   const [notifyState, setNotifyState] = useState<'ok' | 'denied' | 'unsupported'>('ok')
@@ -369,6 +374,20 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
                   ? t('settings.browserNotifyDenied')
                   : t('settings.browserNotifyHint')}
             </p>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={whileVisible}
+                onChange={(e) => setWhileVisible(e.target.checked)}
+                disabled={!browserPush || !notifyChecked}
+                aria-label={t('settings.notifyWhileVisible')}
+                className="h-4 w-4 rounded border-gray-300 accent-indigo-600 focus:ring-indigo-500 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800"
+              />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t('settings.notifyWhileVisible')}
+              </span>
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.notifyWhileVisibleHint')}</p>
           </div>
         </section>
 

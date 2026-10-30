@@ -18,12 +18,14 @@ import { BrowserNotifyProvider, useBrowserNotify } from '../browserNotify'
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const KEY = 'easymoney.browserNotify'
+const WHILE_VISIBLE_KEY = 'easymoney.pushWhileVisible'
 
 describe('BrowserNotifyProvider', () => {
   let root: Root | null = null
 
   beforeEach(() => {
     localStorage.removeItem(KEY)
+    localStorage.removeItem(WHILE_VISIBLE_KEY)
   })
 
   afterEach(() => {
@@ -31,25 +33,40 @@ describe('BrowserNotifyProvider', () => {
     if (r) act(() => r.unmount())
     root = null
     localStorage.removeItem(KEY)
+    localStorage.removeItem(WHILE_VISIBLE_KEY)
   })
 
-  function render(): { enabled: () => boolean; setEnabled: (next: boolean) => void } {
+  function render(): {
+    enabled: () => boolean
+    setEnabled: (next: boolean) => void
+    whileVisible: () => boolean
+    setWhileVisible: (next: boolean) => void
+  } {
     const el = document.createElement('div')
     document.body.appendChild(el)
     const r = createRoot(el)
     root = r
     let enabled = false
     let set: (next: boolean) => void = () => undefined
+    let wv = false
+    let setWv: (next: boolean) => void = () => undefined
     function Probe() {
-      const { enabled: e, setEnabled: s } = useBrowserNotify()
+      const { enabled: e, setEnabled: s, whileVisible: w, setWhileVisible: sw } = useBrowserNotify()
       enabled = e
       set = s
+      wv = w
+      setWv = sw
       return null
     }
     act(() => {
       r.render(createElement(BrowserNotifyProvider, null, createElement(Probe)))
     })
-    return { enabled: () => enabled, setEnabled: set }
+    return {
+      enabled: () => enabled,
+      setEnabled: set,
+      whileVisible: () => wv,
+      setWhileVisible: setWv,
+    }
   }
 
   it('defaults to off when nothing is stored', () => {
@@ -129,5 +146,56 @@ describe('BrowserNotifyProvider', () => {
     } finally {
       Storage.prototype.getItem = real
     }
+  })
+
+  it('whileVisible defaults to off when nothing is stored', () => {
+    const p = render()
+    expect(p.whileVisible()).toBe(false)
+  })
+
+  it('whileVisible starts on when a stored preference is "on"', () => {
+    localStorage.setItem(WHILE_VISIBLE_KEY, 'on')
+    const p = render()
+    expect(p.whileVisible()).toBe(true)
+  })
+
+  it('setWhileVisible(true) turns the preference on and persists it', () => {
+    const p = render()
+    act(() => p.setWhileVisible(true))
+    expect(p.whileVisible()).toBe(true)
+    expect(localStorage.getItem(WHILE_VISIBLE_KEY)).toBe('on')
+  })
+
+  it('setWhileVisible(false) turns the preference off and persists it', () => {
+    localStorage.setItem(WHILE_VISIBLE_KEY, 'on')
+    const p = render()
+    act(() => p.setWhileVisible(false))
+    expect(p.whileVisible()).toBe(false)
+    expect(localStorage.getItem(WHILE_VISIBLE_KEY)).toBe('off')
+  })
+
+  it('syncs whileVisible from a storage event fired by another tab', () => {
+    const p = render()
+    expect(p.whileVisible()).toBe(false)
+    // Another tab of the same browser turned the preference on (the browser
+    // fires the `storage` event only in the *other* tabs, never the writer).
+    localStorage.setItem(WHILE_VISIBLE_KEY, 'on')
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: WHILE_VISIBLE_KEY, newValue: 'on' }))
+    })
+    expect(p.whileVisible()).toBe(true)
+    // ...and the main preference must NOT have moved with it.
+    expect(p.enabled()).toBe(false)
+  })
+
+  it('a storage event for the main preference does not move whileVisible', () => {
+    const p = render()
+    act(() => p.setWhileVisible(true))
+    localStorage.setItem(KEY, 'on')
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: KEY, newValue: 'on' }))
+    })
+    expect(p.enabled()).toBe(true)
+    expect(p.whileVisible()).toBe(true)
   })
 })

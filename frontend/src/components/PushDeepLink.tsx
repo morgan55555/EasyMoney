@@ -10,6 +10,15 @@
  * `{ type: 'em:nav', url }` to the tab it focuses, and THIS component performs
  * the actual react-router navigation.
  *
+ * Delivery target: per the service-worker spec (MDN, `Client.postMessage`),
+ * the posted message arrives as a `message` event on the page's
+ * **`navigator.serviceWorker`** (the ServiceWorkerContainer) — never on
+ * `window`. A `window` listener never sees it: that is exactly why the earlier
+ * implementation of this component — which listened on `window` — focused the
+ * tab but never routed, in both browsers. This component therefore listens on
+ * `navigator.serviceWorker`, guarded for contexts where it is absent (no
+ * secure context, some test environments).
+ *
  * It is mounted unconditionally inside `<BrowserRouter>` (App.tsx), so every
  * route — the app, the auth pages, the invite page — can receive a click while
  * it is on screen. The guard keeps only same-origin messages of the exact
@@ -25,18 +34,25 @@ export function PushDeepLink() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      const d = event.data as { type?: unknown; url?: unknown } | null
+    // A service worker's `Client.postMessage` is delivered to the page's
+    // `navigator.serviceWorker`, NOT to `window` (AGENTS.md §2.14) — without
+    // a service worker there is nothing to receive.
+    const target: EventTarget | undefined = navigator.serviceWorker
+    if (!target) return
+
+    const onMessage: EventListener = (event: Event) => {
+      const m = event as MessageEvent
+      const d = m.data as { type?: unknown; url?: unknown } | null
       if (!d || typeof d !== 'object' || d.type !== 'em:nav') return
       const url = d.url
       if (typeof url !== 'string' || !url.startsWith('/')) return
       // A *different* (external) origin is rejected; an empty origin is
       // allowed — some browsers report a worker-posted message with no origin.
-      if (event.origin && event.origin !== window.location.origin) return
+      if (m.origin && m.origin !== window.location.origin) return
       navigate(url)
     }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
+    target.addEventListener('message', onMessage)
+    return () => target.removeEventListener('message', onMessage)
   }, [navigate])
 
   return null

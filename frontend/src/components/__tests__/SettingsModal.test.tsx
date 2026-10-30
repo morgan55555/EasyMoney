@@ -75,6 +75,7 @@ let r: RenderResult | null = null
 beforeEach(() => {
   localStorage.removeItem('easymoney.theme')
   localStorage.removeItem('easymoney.browserNotify')
+  localStorage.removeItem('easymoney.pushWhileVisible')
   // Web Push defaults: unsupported (toggle disabled with the unsupported
   // hint), enable/disable inert. The toggle tests override what they need.
   pushSupportedMock.mockReturnValue(false)
@@ -86,6 +87,7 @@ afterEach(() => {
   r = null
   localStorage.removeItem('easymoney.theme')
   localStorage.removeItem('easymoney.browserNotify')
+  localStorage.removeItem('easymoney.pushWhileVisible')
   document.documentElement.classList.remove('dark')
   vi.clearAllMocks()
 })
@@ -228,6 +230,34 @@ describe('SettingsModal', () => {
       expect(box.checked).toBe(false)
       expect(localStorage.getItem('easymoney.browserNotify')).not.toBe('on')
       expect(hasText(r.body, 'Browser notifications are not available in this browser.')).toBe(true)
+    })
+
+    it('exposes the notify-while-visible checkbox, enabled once the main toggle is on, and persists it', async () => {
+      pushSupportedMock.mockReturnValue(true)
+      enablePushMock.mockResolvedValue('ok')
+      r = render(createElement(SettingsModal, { open: true, onClose: () => undefined }), {
+        seed,
+        theme: true,
+        notify: true,
+      })
+      const box = labeledInput(r.body, 'Browser notifications')
+      const wv = labeledInput(r.body, 'Also notify while the app is visible')
+      // Main toggle is off → the while-visible preference is meaningless and
+      // disabled (no subscription exists, so no push could ever fire).
+      expect(wv.disabled).toBe(true)
+      expect(wv.checked).toBe(false)
+      click(box)
+      await flush()
+      expect(box.checked).toBe(true)
+      expect(wv.disabled).toBe(false)
+      click(wv)
+      await flush()
+      expect(wv.checked).toBe(true)
+      expect(localStorage.getItem('easymoney.pushWhileVisible')).toBe('on')
+      click(wv)
+      await flush()
+      expect(wv.checked).toBe(false)
+      expect(localStorage.getItem('easymoney.pushWhileVisible')).toBe('off')
     })
   })
 })

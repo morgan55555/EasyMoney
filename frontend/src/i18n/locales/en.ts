@@ -401,6 +401,9 @@ export const en: Dict = {
   'settings.browserNotifyHint': 'Show a notification on your device when the app is in the background.',
   'settings.browserNotifyDenied': 'Notifications are blocked for this site. Allow them in your browser settings.',
   'settings.browserNotifyUnsupported': 'Browser notifications are not available in this browser.',
+  'settings.notifyWhileVisible': 'Also notify while the app is visible',
+  'settings.notifyWhileVisibleHint':
+    'Show OS notifications even when a tab of the app is open in the foreground.',
 
   // --- Verify email gate --------------------------------------------------------------------
   'verify.title': 'Confirm your email',

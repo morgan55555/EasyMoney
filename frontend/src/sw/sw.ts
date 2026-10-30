@@ -11,10 +11,13 @@
  * same place.
  *
  * Display condition (§2.14): an OS notification is shown only when no app
- * window is visible. While any tab is visible the bell badge + sound already
- * inform the user (no double-alerting); with no clients at all (app closed)
- * the notification shows. The push-permission prompt is raised only inside the
- * Settings-toggle gesture (lib/push.enablePush) — never here, never on load.
+ * window is visible — or the user has the client-only
+ * `easymoney.pushWhileVisible` preference on. While any tab is visible and
+ * the preference is off, the bell badge + sound already inform the user (no
+ * double-alerting); with no clients at all (app closed) the notification
+ * shows regardless of the preference. The push-permission prompt is raised
+ * only inside the Settings-toggle gesture (lib/push.enablePush) — never
+ * here, never on load.
  *
  * Updates take over immediately (install → skipWaiting, activate →
  * clients.claim): without that a redeployed worker would sit "waiting" until
@@ -65,10 +68,33 @@ function targetFor(n: NotificationOut): string | null {
   return null
 }
 
+/**
+ * Whether the user allowed OS notifications while an app tab is visible —
+ * the client-only `easymoney.pushWhileVisible` preference (§2.14 display
+ * condition). Read fresh from the page's shared localStorage on every push,
+ * so a change in Settings applies from the very next push — no reload or
+ * re-subscribe.
+ */
+function whileVisibleAllowed(): boolean {
+  try {
+    // The page's shared localStorage (same origin as the app's pages); the
+    // WorkerGlobalScope typing predates storage on workers, hence the cast
+    // (structural: the DOM `Storage` type is unavailable in the SW build).
+    const storage = (self as unknown as {
+      localStorage?: { getItem(key: string): string | null }
+    }).localStorage
+    return storage?.getItem('easymoney.pushWhileVisible') === 'on'
+  } catch {
+    return false // storage unavailable (e.g. private mode) — keep suppression
+  }
+}
+
 /** Show the OS notification, but only when no app tab is visible (§2.14). */
 async function showWhenHidden(data: PushPayload): Promise<void> {
   const clients = await scope.clients.matchAll({ type: 'window' })
-  if (clients.some((c) => c.visibilityState === 'visible')) return
+  // Suppressed while a tab is visible — unless the user opted in to
+  // notifications while visible (the preference is read at push time).
+  if (clients.some((c) => c.visibilityState === 'visible') && !whileVisibleAllowed()) return
 
   const lang = pickLang(data.lang)
   const t = makeT(DICTS[lang])

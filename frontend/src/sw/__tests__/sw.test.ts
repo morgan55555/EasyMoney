@@ -111,6 +111,9 @@ afterEach(() => {
   delete (window as unknown as { clients?: unknown }).clients
   delete (window as unknown as { registration?: unknown }).registration
   delete (window as unknown as { skipWaiting?: unknown }).skipWaiting
+  // The while-visible preference (read by the worker at push time) must not
+  // leak between tests: default is off = suppressed while a tab is visible.
+  localStorage.removeItem('easymoney.pushWhileVisible')
 })
 
 describe('push handler', () => {
@@ -156,6 +159,32 @@ describe('push handler', () => {
   it('suppresses the notification while an app tab is visible (the bell covers it)', async () => {
     await importSw()
     const fakes = installFakes([{ visibilityState: 'visible' }])
+    const { event, waitUntil } = pushEvent(EXPENSE_PAYLOAD)
+
+    captured.push!(event)
+
+    await waitUntil.mock.calls[0][0]
+    expect(fakes.registration.showNotification).not.toHaveBeenCalled()
+  })
+
+  it('shows the notification while an app tab is visible when the notify-while-visible preference is on', async () => {
+    await importSw()
+    const fakes = installFakes([{ visibilityState: 'visible' }])
+    // The worker reads the shared localStorage key at push time (in happy-dom
+    // `self` is the window, so window.localStorage is what it sees).
+    localStorage.setItem('easymoney.pushWhileVisible', 'on')
+    const { event, waitUntil } = pushEvent(EXPENSE_PAYLOAD)
+
+    captured.push!(event)
+
+    await waitUntil.mock.calls[0][0]
+    expect(fakes.registration.showNotification).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats a garbage stored value as "not allowed" while a tab is visible', async () => {
+    await importSw()
+    const fakes = installFakes([{ visibilityState: 'visible' }])
+    localStorage.setItem('easymoney.pushWhileVisible', 'garbage')
     const { event, waitUntil } = pushEvent(EXPENSE_PAYLOAD)
 
     captured.push!(event)
