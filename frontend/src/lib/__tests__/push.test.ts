@@ -7,9 +7,11 @@
  *     'ok' / 'denied' (NotAllowedError) / 'unsupported' (VAPID 404, no SW)
  *     outcomes;
  *   - `disablePush()` — local unsubscribe + server forget, idempotent
- *     no-ops, and a swallowed server-forget failure;
- *   - `registerServiceWorker()` — registers /sw.js once and reuses the
- *     cached registration promise.
+ *     no-ops, a swallowed server-forget failure, and the endpoint captured
+ *     BEFORE the local unsubscribe invalidates it (the server deletes by
+ *     (user, endpoint), so a post-unsubscribe read would send '');
+ *   - `registerServiceWorker()` — registers /sw.js once, reuses the cached
+ *     registration promise, and revalidates for a rebuilt worker.
  *
  * happy-dom ships no Web Push APIs, so each test installs the minimal
  * stand-ins it needs (restored afterwards). The push module caches its SW
@@ -126,28 +128,43 @@ interface FakeSubscription {
   toJSON: () => { endpoint: string; keys: { p256dh: string; auth: string } }
 }
 
+/**
+ * A spec-shaped subscription: once `unsubscribe()` has resolved, reading
+ * `endpoint` returns '' (the Web Push spec invalidates it) — exactly the
+ * behavior that made the old disablePush send an empty endpoint to the server.
+ */
 function makeSubscription(endpoint = 'https://push.example/sub-1'): FakeSubscription {
   const keys = { p256dh: 'p256dh', auth: 'auth' }
+  let current = endpoint
   return {
-    endpoint,
+    get endpoint() {
+      return current
+    },
     keys,
-    unsubscribe: vi.fn(async () => true),
-    toJSON: () => ({ endpoint, keys: { ...keys } }),
+    unsubscribe: vi.fn(async () => {
+      current = ''
+      return true
+    }),
+    toJSON: () => ({ endpoint: current, keys: { ...keys } }),
   }
 }
 
 function makeRegistration(
   sub: FakeSubscription | null,
   subscribeImpl?: (opts: PushSubscriptionOptionsInit) => Promise<FakeSubscription>,
-): { reg: ServiceWorkerRegistration; subscribe: Mock; getSubscription: Mock } {
+): { reg: ServiceWorkerRegistration; subscribe: Mock; getSubscription: Mock; update: Mock } {
   const subscribe = vi.fn(async (opts: PushSubscriptionOptionsInit) => {
     if (subscribeImpl) return subscribeImpl(opts)
     if (!sub) throw new DOMException('no subscription', 'InvalidStateError')
     return sub
   })
   const getSubscription = vi.fn(async () => sub)
-  const reg = { pushManager: { subscribe, getSubscription } } as unknown as ServiceWorkerRegistration
-  return { reg, subscribe, getSubscription }
+  const update = vi.fn(async () => undefined)
+  const reg = {
+    pushManager: { subscribe, getSubscription },
+    update,
+  } as unknown as ServiceWorkerRegistration
+  return { reg, subscribe, getSubscription, update }
 }
 
 const ALL: { serviceWorker: true; pushManager: true; notification: true } = {
@@ -180,8 +197,8 @@ describe('pushSupported (§2.14)', () => {
 })
 
 describe('registerServiceWorker', () => {
-  it('registers /sw.js once and reuses the cached registration', async () => {
-    const { reg } = makeRegistration(null)
+  it('registers /sw.js once, reuses the cached registration, and revalidates', async () => {
+    const { reg, update } = makeRegistration(null)
     const stubs = installGlobals({ serviceWorker: true, register: async () => reg })
     const { push } = await loadPush()
 
@@ -192,6 +209,9 @@ describe('registerServiceWorker', () => {
     expect(second).toBe(reg)
     expect(stubs.register).toHaveBeenCalledTimes(1)
     expect(stubs.register).toHaveBeenCalledWith('/sw.js')
+    // A rebuilt /sw.js must be picked up on the next reload; the registration
+    // revalidates exactly once (the promise is cached).
+    expect(update).toHaveBeenCalledTimes(1)
   })
 })
 

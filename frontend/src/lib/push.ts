@@ -27,11 +27,17 @@ let swPromise: Promise<ServiceWorkerRegistration> | null = null
 /**
  * Register (or reuse) the service worker at /sw.js. Never raises a permission
  * prompt — only `PushManager.subscribe` does, and that happens in
- * {@link enablePush} on the user's gesture.
+ * {@link enablePush} on the user's gesture. After registration a
+ * fire-and-forget `update()` revalidates /sw.js so a rebuilt worker (e.g. a new
+ * notification deep link) is picked up on the user's next reload instead of the
+ * previously installed copy lingering.
  */
 export function registerServiceWorker(): Promise<ServiceWorkerRegistration> {
   if (!swPromise) {
-    swPromise = navigator.serviceWorker.register('/sw.js')
+    swPromise = navigator.serviceWorker.register('/sw.js').then((reg) => {
+      void reg.update().catch(() => undefined)
+      return reg
+    })
   }
   return swPromise
 }
@@ -88,7 +94,10 @@ export async function enablePush(): Promise<PushResult> {
 
 /**
  * Disable Web Push: unsubscribe the browser's subscription and forget it
- * server-side (idempotent). The permission is intentionally not revoked.
+ * server-side (idempotent). The permission is intentionally not revoked. The
+ * endpoint is captured BEFORE the local unsubscribe: the Web Push spec
+ * invalidates it (the getter then returns '') and the server deletes by
+ * (user, endpoint), so an empty endpoint would be a silent no-op.
  */
 export async function disablePush(): Promise<void> {
   try {
@@ -96,9 +105,10 @@ export async function disablePush(): Promise<void> {
     if (!reg) return
     const sub = await reg.pushManager.getSubscription()
     if (!sub) return
+    const endpoint = sub.endpoint
     await sub.unsubscribe()
     try {
-      await pushApi.unsubscribe(sub.endpoint)
+      await pushApi.unsubscribe(endpoint)
     } catch {
       // The server row may already be gone (e.g. pruned); the local
       // unsubscribe still holds.
