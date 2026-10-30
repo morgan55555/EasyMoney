@@ -215,6 +215,28 @@ describe('notificationclick handler', () => {
     expect(fakes.clients.openWindow).not.toHaveBeenCalled()
   })
 
+  it('falls back to opening a window when navigate on the existing tab rejects', async () => {
+    await importSw()
+    const client = {
+      visibilityState: 'visible',
+      focus: vi.fn(async () => {}),
+      navigate: vi.fn(async () => {
+        throw new DOMException('navigation interrupted', 'NetworkError')
+      }),
+    }
+    const fakes = installFakes([client])
+    const { event, waitUntil } = clickEvent({ url: '/groups/9?tab=expenses&focus=expense:50' })
+
+    captured.click!(event)
+
+    await waitUntil.mock.calls[0][0]
+    expect(client.focus).toHaveBeenCalledTimes(1)
+    // navigate rejected -> the click still lands, in a new window at the
+    // absolute URL, rather than silently doing nothing.
+    expect(fakes.clients.openWindow).toHaveBeenCalledTimes(1)
+    expect(fakes.clients.openWindow).toHaveBeenCalledWith('http://localhost/groups/9?tab=expenses&focus=expense:50')
+  })
+
   it('opens the app root when the notification carries no deep link', async () => {
     await importSw()
     const fakes = installFakes([])

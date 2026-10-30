@@ -115,8 +115,15 @@ async function focusAndNavigate(url: string | undefined): Promise<void> {
     await scope.clients.openWindow(url ?? '/')
     return
   }
-  await client.focus()
-  if (url) await client.navigate(toAbsolute(url))
+  try {
+    await client.focus()
+    if (url) await client.navigate(toAbsolute(url))
+  } catch {
+    // navigate() can reject (the client navigated away mid-flight, an
+    // unsupported edge case). Fall back to a new window so the click always
+    // lands on the target instead of silently doing nothing.
+    await scope.clients.openWindow(toAbsolute(url ?? '/'))
+  }
 }
 
 /** Resolve a site-relative path to the absolute URL `client.navigate` requires. */
