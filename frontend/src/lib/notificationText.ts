@@ -98,6 +98,11 @@ export function notificationTarget(n: NotificationOut): { group_id: number; tab:
     case 'settlement.rejected':
     case 'settlement.cancelled':
       return typeof p.id === 'number' ? { group_id: gid, tab: 'payments', focus: `settlement:${p.id}` } : null
+    case 'expense.deleted':
+      // The expense is gone, so the View button lands on the activity tab
+      // with the removal's feed row highlighted (the newest `expense.deleted`
+      // row — FeedPanel expands the list and flashes it, §2.14).
+      return { group_id: gid, tab: 'activity', focus: 'feed:expense.deleted' }
     case 'member.joined':
       return { group_id: gid, tab: 'activity', focus: 'feed:member.joined' }
     case 'member.left':

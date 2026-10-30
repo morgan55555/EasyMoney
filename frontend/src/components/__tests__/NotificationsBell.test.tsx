@@ -255,6 +255,13 @@ describe('notificationTarget', () => {
   })
 
   it('maps member and group events to the activity tab', () => {
+    // A deleted expense is gone, so its View button targets the activity
+    // tab's feed row (the newest `expense.deleted` row), not the expense.
+    expect(notificationTarget(n(1, 'expense.deleted', { id: 12, group_id: 5 }))).toEqual({
+      group_id: 5,
+      tab: 'activity',
+      focus: 'feed:expense.deleted',
+    })
     expect(notificationTarget(n(1, 'member.joined', { group_id: 5 }))).toEqual({
       group_id: 5,
       tab: 'activity',

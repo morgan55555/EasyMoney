@@ -375,8 +375,12 @@ async def delete_expense(db: AsyncSession, expense: Expense, user: User) -> None
     if expense.attachment is not None:
         receipt_key = expense.attachment.filename  # detached after the commit
         await db.delete(expense.attachment)
+    # ``group_id`` lets the client deep-link the notification's View button
+    # into the group's activity tab (§2.14), like every other group-scoped
+    # event payload.
     payload = {
         "id": expense.id,
+        "group_id": expense.group_id,
         "description": expense.description,
         "amount": currency_service.format_money(expense.amount, group.currency),
         "currency": group.currency,

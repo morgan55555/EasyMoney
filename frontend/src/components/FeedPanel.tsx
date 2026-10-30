@@ -70,8 +70,16 @@ function makeDescribe(t: TFunc, locale: string) {
 
 // The notification payload names the event type but not the feed row id, so
 // a deep link highlights the NEWEST row of that type — the feed is newest
-// first, so that is exactly the row the notification was raised for.
-const FOCUSABLE_FEED_TYPES = new Set(['member.joined', 'member.left', 'group.closed', 'group.reopened'])
+// first, so that is exactly the row the notification was raised for. Deleted
+// expenses stay in the feed as their `expense.deleted` row (§3.3), so the
+// removal's View button lands here, not on the (gone) expense.
+const FOCUSABLE_FEED_TYPES = new Set([
+  'expense.deleted',
+  'member.joined',
+  'member.left',
+  'group.closed',
+  'group.reopened',
+])
 
 export function FeedPanel({ groupId, focusType = null }: { groupId: number; focusType?: string | null }) {
   const feed = useFeed(groupId)

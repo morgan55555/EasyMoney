@@ -378,6 +378,9 @@ async def _delete_notifies_participants_scenario(factory: async_sessionmaker) ->
             ]
             assert len(notes) == 1
             assert notes[0]["payload"]["description"] == "dinner"
+            # The payload carries group_id so the View button can deep-link
+            # into the group's activity tab (§2.14).
+            assert notes[0]["payload"]["group_id"] == group_id
         # ... and no one else: carol was a member but not a participant.
         assert _of_type(carol_tab, "notification.created", group_id) == []
 
