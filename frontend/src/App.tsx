@@ -16,6 +16,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from '
 
 import { getTokens } from './api/client'
 import { Layout } from './components/Layout'
+import { PushDeepLink } from './components/PushDeepLink'
 import { VerifyEmailGate } from './components/VerifyEmailGate'
 import { Spinner } from './components/ui'
 import { useI18n } from './i18n'
@@ -86,6 +87,7 @@ function PreferredLanguageSync() {
 export default function App() {
   return (
     <BrowserRouter>
+      <PushDeepLink />
       <Routes>
         <Route
           path="/login"

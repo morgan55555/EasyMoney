@@ -94,41 +94,38 @@ async function showWhenHidden(data: PushPayload): Promise<void> {
 }
 
 /**
- * Focus an existing app window (or open one) and navigate it to the target.
- * `Client.navigate()` requires a fully valid *absolute* URL — unlike
- * `clients.openWindow()`, which resolves a relative path against the
- * registration scope — so the site-relative deep link is resolved with
- * `toAbsolute` before navigating an already-open tab. Without that, the
- * navigate call throws and the click silently does nothing (the deep link
- * only worked while no app tab was open).
+ * Bring an existing app tab to the front and route it to the notification's
+ * target — or open a fresh tab at the target when none is open.
+ *
+ * Routing is done in-page with `Client.postMessage` + a `message` listener
+ * (components/PushDeepLink), NOT `Client.navigate()`. `navigate()` only reaches
+ * a client this worker *controls*; after a redeploy — or across several tabs —
+ * the target tab is often uncontrolled, where `navigate()` throws in Firefox
+ * (the click opened a brand-new tab) and silently no-ops in Chrome (the tab
+ * focused but never routed). `postMessage` reaches controlled *and* uncontrolled
+ * clients in both browsers, so the deep link lands regardless of that state.
+ * Among several tabs we prefer the one the user is actually looking at
+ * (`visibilityState === 'visible'`) rather than always the oldest, so a click
+ * with two tabs open routes the active one.
  */
 async function focusAndNavigate(url: string | undefined): Promise<void> {
   const clients = await scope.clients.matchAll({ type: 'window', includeUncontrolled: true })
-  let client: WindowClient | undefined
-  for (const c of clients) {
-    if ('focus' in c) {
-      client = c
-      break
-    }
-  }
+  const windows = clients.filter((c): c is WindowClient => 'focus' in c)
+  const client = windows.find((c) => c.visibilityState === 'visible') ?? windows[0]
   if (!client) {
+    // No app tab: open one. `openWindow` resolves a site-relative path against
+    // the registration scope, so the raw relative target is correct here.
     await scope.clients.openWindow(url ?? '/')
     return
   }
-  try {
-    await client.focus()
-    if (url) await client.navigate(toAbsolute(url))
-  } catch {
-    // navigate() can reject (the client navigated away mid-flight, an
-    // unsupported edge case). Fall back to a new window so the click always
-    // lands on the target instead of silently doing nothing.
-    await scope.clients.openWindow(toAbsolute(url ?? '/'))
+  await client.focus()
+  if (url) {
+    try {
+      client.postMessage({ type: 'em:nav', url })
+    } catch {
+      // The client was destroyed mid-flight — nothing left to route.
+    }
   }
-}
-
-/** Resolve a site-relative path to the absolute URL `client.navigate` requires. */
-function toAbsolute(url: string): string {
-  return new URL(url, scope.registration.scope).href
 }
 
 // Lifecycle: a rebuilt worker must take over at once. Without skipWaiting a

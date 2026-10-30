@@ -27,17 +27,20 @@ let swPromise: Promise<ServiceWorkerRegistration> | null = null
 /**
  * Register (or reuse) the service worker at /sw.js. Never raises a permission
  * prompt — only `PushManager.subscribe` does, and that happens in
- * {@link enablePush} on the user's gesture. After registration a
- * fire-and-forget `update()` revalidates /sw.js so a rebuilt worker (e.g. a new
- * notification deep link) is picked up on the user's next reload instead of the
- * previously installed copy lingering.
+ * {@link enablePush} on the user's gesture. `updateViaCache: 'none'` makes the
+ * browser check the *network* (never the HTTP cache) when looking for a newer
+ * worker, and a fire-and-forget `update()` revalidates /sw.js right after —
+ * together they guarantee a rebuilt worker (e.g. a new click handler) is picked
+ * up on the next load instead of the previously installed copy lingering.
  */
 export function registerServiceWorker(): Promise<ServiceWorkerRegistration> {
   if (!swPromise) {
-    swPromise = navigator.serviceWorker.register('/sw.js').then((reg) => {
-      void reg.update().catch(() => undefined)
-      return reg
-    })
+    swPromise = navigator.serviceWorker
+      .register('/sw.js', { updateViaCache: 'none' })
+      .then((reg) => {
+        void reg.update().catch(() => undefined)
+        return reg
+      })
   }
   return swPromise
 }

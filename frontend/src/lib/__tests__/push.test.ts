@@ -214,7 +214,9 @@ describe('registerServiceWorker', () => {
     expect(first).toBe(reg)
     expect(second).toBe(reg)
     expect(stubs.register).toHaveBeenCalledTimes(1)
-    expect(stubs.register).toHaveBeenCalledWith('/sw.js')
+    // updateViaCache:'none' forces a network (never HTTP-cache) check for a
+    // newer worker, so a rebuilt /sw.js is picked up on the next load.
+    expect(stubs.register).toHaveBeenCalledWith('/sw.js', { updateViaCache: 'none' })
     // A rebuilt /sw.js must be picked up on the next reload; the registration
     // revalidates exactly once (the promise is cached).
     expect(update).toHaveBeenCalledTimes(1)

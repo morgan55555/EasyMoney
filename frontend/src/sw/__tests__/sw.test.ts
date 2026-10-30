@@ -48,7 +48,7 @@ async function importSw(): Promise<void> {
 
 interface WinFakes {
   clients: { matchAll: Mock; openWindow: Mock; claim: Mock }
-  registration: { showNotification: Mock; scope: string }
+  registration: { showNotification: Mock }
   skipWaiting: Mock
 }
 
@@ -59,9 +59,7 @@ function installFakes(clients: Array<Record<string, unknown>> = []): WinFakes {
       openWindow: vi.fn(async () => ({})),
       claim: vi.fn(),
     },
-    // scope stands in for the registration scope the SW resolves deep links
-    // against before client.navigate (which needs an absolute URL).
-    registration: { showNotification: vi.fn(async () => ({})), scope: 'http://localhost/' },
+    registration: { showNotification: vi.fn(async () => ({})) },
     skipWaiting: vi.fn(async () => undefined),
   }
   ;(window as unknown as { clients: unknown }).clients = fakes.clients
@@ -193,12 +191,12 @@ describe('notificationclick handler', () => {
     expect(fakes.clients.openWindow).toHaveBeenCalledWith('/groups/1?tab=expenses&focus=expense:42')
   })
 
-  it('focuses and navigates an existing app tab instead of opening a window', async () => {
+  it('focuses an existing app tab and routes it in-page via postMessage (not a new window)', async () => {
     await importSw()
     const client = {
       visibilityState: 'visible',
       focus: vi.fn(async () => {}),
-      navigate: vi.fn(async () => {}),
+      postMessage: vi.fn(),
     }
     const fakes = installFakes([client])
     const { event, waitUntil } = clickEvent({ url: '/groups/7?tab=expenses&focus=expense:44' })
@@ -207,34 +205,60 @@ describe('notificationclick handler', () => {
 
     await waitUntil.mock.calls[0][0]
     expect(client.focus).toHaveBeenCalledTimes(1)
-    // client.navigate() requires a fully valid absolute URL — a relative
-    // path throws and the click silently does nothing (the reported bug:
-    // the deep link only worked while no app tab was open). So the relative
-    // target is resolved against the registration scope first.
-    expect(client.navigate).toHaveBeenCalledWith('http://localhost/groups/7?tab=expenses&focus=expense:44')
+    // Routing is in-page: the worker posts the site-relative target and the
+    // app's message listener (PushDeepLink) does the react-router navigation.
+    // postMessage reaches controlled AND uncontrolled clients, so the deep link
+    // lands even when this tab is not controlled by the worker handling the
+    // click (the old Client.navigate path threw in Firefox / no-op'd in Chrome).
+    expect(client.postMessage).toHaveBeenCalledWith({
+      type: 'em:nav',
+      url: '/groups/7?tab=expenses&focus=expense:44',
+    })
     expect(fakes.clients.openWindow).not.toHaveBeenCalled()
   })
 
-  it('falls back to opening a window when navigate on the existing tab rejects', async () => {
+  it('routes the visible tab, not the oldest, when several app tabs are open', async () => {
     await importSw()
-    const client = {
-      visibilityState: 'visible',
-      focus: vi.fn(async () => {}),
-      navigate: vi.fn(async () => {
-        throw new DOMException('navigation interrupted', 'NetworkError')
-      }),
-    }
-    const fakes = installFakes([client])
-    const { event, waitUntil } = clickEvent({ url: '/groups/9?tab=expenses&focus=expense:50' })
+    const oldest = { visibilityState: 'hidden', focus: vi.fn(async () => {}), postMessage: vi.fn() }
+    const active = { visibilityState: 'visible', focus: vi.fn(async () => {}), postMessage: vi.fn() }
+    const fakes = installFakes([oldest, active])
+    const { event, waitUntil } = clickEvent({ url: '/groups/9?tab=activity&focus=feed:expense.deleted' })
 
     captured.click!(event)
 
     await waitUntil.mock.calls[0][0]
+    // The user is looking at the second tab; the click must route THAT one, not
+    // the first-opened (the reported "works on the first tab, not the second").
+    expect(active.focus).toHaveBeenCalledTimes(1)
+    expect(active.postMessage).toHaveBeenCalledWith({
+      type: 'em:nav',
+      url: '/groups/9?tab=activity&focus=feed:expense.deleted',
+    })
+    expect(oldest.focus).not.toHaveBeenCalled()
+    expect(oldest.postMessage).not.toHaveBeenCalled()
+    expect(fakes.clients.openWindow).not.toHaveBeenCalled()
+  })
+
+  it('still focuses the tab when posting the route throws (the client died mid-flight)', async () => {
+    await importSw()
+    const client = {
+      visibilityState: 'visible',
+      focus: vi.fn(async () => {}),
+      postMessage: vi.fn(() => {
+        throw new DOMException('client closed', 'InvalidStateError')
+      }),
+    }
+    const fakes = installFakes([client])
+    const { event, waitUntil } = clickEvent({ url: '/groups/3?tab=expenses&focus=expense:8' })
+
+    captured.click!(event)
+
+    // The throw is swallowed, so the waitUntil promise resolves (no unhandled
+    // rejection) and the tab was still brought to the front.
+    await expect(waitUntil.mock.calls[0][0]).resolves.toBeUndefined()
     expect(client.focus).toHaveBeenCalledTimes(1)
-    // navigate rejected -> the click still lands, in a new window at the
-    // absolute URL, rather than silently doing nothing.
-    expect(fakes.clients.openWindow).toHaveBeenCalledTimes(1)
-    expect(fakes.clients.openWindow).toHaveBeenCalledWith('http://localhost/groups/9?tab=expenses&focus=expense:50')
+    expect(client.postMessage).toHaveBeenCalledTimes(1)
+    expect(fakes.clients.openWindow).not.toHaveBeenCalled()
   })
 
   it('opens the app root when the notification carries no deep link', async () => {
