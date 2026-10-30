@@ -22,9 +22,10 @@ fresh balance snapshot in every group event.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -182,10 +183,15 @@ async def _transition(
     values: dict[str, Any] = {"state": new_state}
     if new_state == "confirmed":
         values["confirmed_at"] = datetime.now(UTC)
-    result = await db.execute(
-        update(Settlement)
-        .where(Settlement.id == settlement.id, Settlement.state == "pending")
-        .values(**values)
+    # A DML execute() returns a CursorResult at runtime; the static return
+    # type of AsyncSession.execute is the wider Result, which has no rowcount.
+    result = cast(
+        CursorResult[Any],
+        await db.execute(
+            update(Settlement)
+            .where(Settlement.id == settlement.id, Settlement.state == "pending")
+            .values(**values)
+        ),
     )
     if result.rowcount == 0:
         # Lost the race: another session transitioned it first (§2.8).

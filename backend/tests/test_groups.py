@@ -8,6 +8,10 @@
 Plus §2.9: while a group is closed, new expenses and receipt uploads are
 rejected (409) and reopening restores writes.
 
+And §2.13: the email-invite mail follows the recipient's preferred language
+(RU for an account holder who prefers Russian, EN fallback for an unknown
+address).
+
 All scenarios run against the test DB (fresh schema per scenario).
 """
 
@@ -254,6 +258,50 @@ async def _email_invite_rejects_pending_duplicate(factory: async_sessionmaker) -
     assert await _invite_count(factory) == 2
 
 
+async def _email_invite_mail_follows_recipient_language(factory: async_sessionmaker) -> None:
+    """§2.13: the invite email follows the recipient's preferred language.
+
+    An account holder who prefers Russian gets a Russian mail; an address with
+    no account falls back to English (the same default as the reminder and
+    close-summary mails). Regression for finding F3 (invite mail was
+    hard-coded to EN).
+    """
+    await _mk_users(factory, (ALICE, BOB))
+    # bob (u2@test.local) prefers Russian.
+    async with factory() as db:
+        bob = await db.get(User, BOB)
+        assert bob is not None
+        bob.preferred_language = "ru"
+        await db.commit()
+    await _mk_group(factory, GROUP_ID, ALICE, (ALICE,))
+    sent: list[tuple[str, str, str, str | None]] = []
+    original = mail_service.send_mail
+
+    async def recorder(to: str, subject: str, text: str, html: str | None = None) -> None:
+        sent.append((to, subject, text, html))
+
+    mail_service.send_mail = recorder
+    try:
+        async with factory() as db:
+            group = await db.get(Group, GROUP_ID)
+            alice = await db.get(User, ALICE)
+            assert group is not None and alice is not None
+            # bob (u2@test.local) has an account and prefers Russian → RU mail.
+            await invites_service.create_invite(db, group, alice, "email", "u2@test.local")
+            # stranger@test.local has no account → English fallback mail.
+            await invites_service.create_invite(db, group, alice, "email", "stranger@test.local")
+    finally:
+        mail_service.send_mail = original
+    assert [m[0] for m in sent] == ["u2@test.local", "stranger@test.local"]
+    bob_mail, stranger_mail = sent
+    # RU: the subject and body carry the Russian invite strings.
+    assert "пригласили" in bob_mail[1]
+    assert "пригласил(а)" in bob_mail[2]
+    # EN fallback for the no-account address.
+    assert "invited you" in stranger_mail[1]
+    assert "invited you to join" in stranger_mail[2]
+
+
 # --- close / reopen write-blocking (§2.9) ------------------------------------
 
 
@@ -354,3 +402,7 @@ def test_email_invite_rejects_pending_duplicate(run_db) -> None:
 
 def test_close_blocks_writes_and_reopen_restores(run_db) -> None:
     run_db(_close_blocks_writes_and_reopen_restores)
+
+
+def test_email_invite_mail_follows_recipient_language(run_db) -> None:
+    run_db(_email_invite_mail_follows_recipient_language)

@@ -32,7 +32,6 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.core import security
 from app.core.config import get_settings
 from app.main import create_app
 
@@ -275,7 +274,9 @@ def _s11_setup(client: TestClient) -> tuple[dict, dict, dict, int, int]:
     assert response.status_code == 201, response.text
     response = client.post("/api/groups/1/invites", json={"kind": "link"}, headers=ha)
     assert response.status_code == 201, response.text
-    response = client.post("/api/invites/accept", json={"token": response.json()["token"]}, headers=hb)
+    response = client.post(
+        "/api/invites/accept", json={"token": response.json()["token"]}, headers=hb
+    )
     assert response.status_code == 200, response.text
     response = client.post(
         "/api/groups/1/expenses",

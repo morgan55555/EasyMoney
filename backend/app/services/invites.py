@@ -93,8 +93,15 @@ async def create_invite(
     await db.commit()
     await db.refresh(invite)
     if kind == "email" and invite.email_to:
+        # The mail follows the recipient's preferred language (§2.13);
+        # recipients without an account default to EN (same rule as the
+        # reminder and close-summary mails).
         subject, text, html = mail_service.invite_message(
-            group.name, actor.display_name, invite.token, settings.invite_expiry_days, lang="en"
+            group.name,
+            actor.display_name,
+            invite.token,
+            settings.invite_expiry_days,
+            lang=invited.preferred_language if invited is not None else "en",
         )
         try:
             await mail_service.send_mail(invite.email_to, subject, text, html)
