@@ -93,7 +93,15 @@ async function showWhenHidden(data: PushPayload): Promise<void> {
   })
 }
 
-/** Focus an existing app window (or open one) and navigate to the target. */
+/**
+ * Focus an existing app window (or open one) and navigate it to the target.
+ * `Client.navigate()` requires a fully valid *absolute* URL — unlike
+ * `clients.openWindow()`, which resolves a relative path against the
+ * registration scope — so the site-relative deep link is resolved with
+ * `toAbsolute` before navigating an already-open tab. Without that, the
+ * navigate call throws and the click silently does nothing (the deep link
+ * only worked while no app tab was open).
+ */
 async function focusAndNavigate(url: string | undefined): Promise<void> {
   const clients = await scope.clients.matchAll({ type: 'window', includeUncontrolled: true })
   let client: WindowClient | undefined
@@ -108,7 +116,12 @@ async function focusAndNavigate(url: string | undefined): Promise<void> {
     return
   }
   await client.focus()
-  if (url) await client.navigate(url)
+  if (url) await client.navigate(toAbsolute(url))
+}
+
+/** Resolve a site-relative path to the absolute URL `client.navigate` requires. */
+function toAbsolute(url: string): string {
+  return new URL(url, scope.registration.scope).href
 }
 
 // Lifecycle: a rebuilt worker must take over at once. Without skipWaiting a

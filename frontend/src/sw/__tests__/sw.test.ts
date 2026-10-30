@@ -48,7 +48,7 @@ async function importSw(): Promise<void> {
 
 interface WinFakes {
   clients: { matchAll: Mock; openWindow: Mock; claim: Mock }
-  registration: { showNotification: Mock }
+  registration: { showNotification: Mock; scope: string }
   skipWaiting: Mock
 }
 
@@ -59,7 +59,9 @@ function installFakes(clients: Array<Record<string, unknown>> = []): WinFakes {
       openWindow: vi.fn(async () => ({})),
       claim: vi.fn(),
     },
-    registration: { showNotification: vi.fn(async () => ({})) },
+    // scope stands in for the registration scope the SW resolves deep links
+    // against before client.navigate (which needs an absolute URL).
+    registration: { showNotification: vi.fn(async () => ({})), scope: 'http://localhost/' },
     skipWaiting: vi.fn(async () => undefined),
   }
   ;(window as unknown as { clients: unknown }).clients = fakes.clients
@@ -205,7 +207,11 @@ describe('notificationclick handler', () => {
 
     await waitUntil.mock.calls[0][0]
     expect(client.focus).toHaveBeenCalledTimes(1)
-    expect(client.navigate).toHaveBeenCalledWith('/groups/7?tab=expenses&focus=expense:44')
+    // client.navigate() requires a fully valid absolute URL — a relative
+    // path throws and the click silently does nothing (the reported bug:
+    // the deep link only worked while no app tab was open). So the relative
+    // target is resolved against the registration scope first.
+    expect(client.navigate).toHaveBeenCalledWith('http://localhost/groups/7?tab=expenses&focus=expense:44')
     expect(fakes.clients.openWindow).not.toHaveBeenCalled()
   })
 
