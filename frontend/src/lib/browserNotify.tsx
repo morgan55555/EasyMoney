@@ -10,12 +10,15 @@
  *     through lib/push); this module only owns the preferences.
  *   - `whileVisible` (`easymoney.pushWhileVisible`): whether an OS
  *     notification may be shown while an app tab is visible (default off =
- *     suppressed while a tab is visible). The service worker reads the same
- *     localStorage key at push time, so the choice applies from the very next
- *     push — no reload or re-subscribe needed.
+ *     suppressed while a tab is visible). The service worker cannot read the
+ *     page's localStorage, so this provider mirrors the preference into a
+ *     shared Cache Storage record (lib/pushPrefs) on every app load and on
+ *     every change; the worker reads that record at push time, so the choice
+ *     applies from the very next push — no reload or re-subscribe needed.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { writeWhileVisiblePref } from './pushPrefs'
 
 const STORAGE_KEY = 'easymoney.browserNotify'
 const WHILE_VISIBLE_KEY = 'easymoney.pushWhileVisible'
@@ -81,6 +84,8 @@ export function BrowserNotifyProvider({ children }: { children: ReactNode }) {
   const setWhileVisible = useCallback((next: boolean) => {
     setWhileVisibleState(next)
     persistWhileVisible(next)
+    // Mirror to the shared cache the service worker reads at push time.
+    void writeWhileVisiblePref(next)
   }, [])
 
   // Cross-tab sync (AGENTS.md §2.14, req 7): both preferences live in
@@ -89,8 +94,12 @@ export function BrowserNotifyProvider({ children }: { children: ReactNode }) {
   // writes, so this keeps this tab's in-memory state in lockstep — without
   // it, a tab opened before the toggle stays off in memory and never
   // registers the service worker, so it can never raise an OS notification
-  // while hidden.
+  // while hidden. On mount the while-visible mirror in the shared cache is
+  // re-asserted from localStorage, so a cleared/absent cache (fresh profile,
+  // upgrade from before the mirror existed) can never leave a stored "on"
+  // dead.
   useEffect(() => {
+    void writeWhileVisiblePref(readWhileVisible())
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY || e.key === WHILE_VISIBLE_KEY) {
         setEnabledState(readStored())

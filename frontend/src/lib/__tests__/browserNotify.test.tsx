@@ -10,9 +10,10 @@
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BrowserNotifyProvider, useBrowserNotify } from '../browserNotify'
+import { PREFS_CACHE, WHILE_VISIBLE_KEY as CACHE_KEY } from '../pushPrefs'
 
 // React 18: tell the runtime we are in a test environment so `act` is allowed.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -20,12 +21,37 @@ import { BrowserNotifyProvider, useBrowserNotify } from '../browserNotify'
 const KEY = 'easymoney.browserNotify'
 const WHILE_VISIBLE_KEY = 'easymoney.pushWhileVisible'
 
+// The shared Cache Storage record the service worker reads at push time
+// (lib/pushPrefs): a fake that records every `put`, whatever happy-dom
+// declares for `caches`.
+const putCalls: Array<{ cache: string; key: string; text: string }> = []
+let putError: Error | null = null
+
+function installCachesFake(): void {
+  putCalls.length = 0
+  putError = null
+  const open = vi.fn(async (name: string) => ({
+    put: vi.fn(async (key: string, res: Response) => {
+      if (putError) throw putError
+      putCalls.push({ cache: name, key, text: await res.text() })
+    }),
+  }))
+  Object.defineProperty(globalThis, 'caches', { value: { open }, configurable: true, writable: true })
+}
+
+async function flushCacheWrites(): Promise<void> {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0))
+  })
+}
+
 describe('BrowserNotifyProvider', () => {
   let root: Root | null = null
 
   beforeEach(() => {
     localStorage.removeItem(KEY)
     localStorage.removeItem(WHILE_VISIBLE_KEY)
+    installCachesFake()
   })
 
   afterEach(() => {
@@ -34,6 +60,7 @@ describe('BrowserNotifyProvider', () => {
     root = null
     localStorage.removeItem(KEY)
     localStorage.removeItem(WHILE_VISIBLE_KEY)
+    Object.defineProperty(globalThis, 'caches', { value: undefined, configurable: true, writable: true })
   })
 
   function render(): {
@@ -197,5 +224,43 @@ describe('BrowserNotifyProvider', () => {
     })
     expect(p.enabled()).toBe(true)
     expect(p.whileVisible()).toBe(true)
+  })
+
+  // --- shared-cache mirror (the service worker's view of whileVisible) ---
+
+  it('re-asserts the stored while-visible preference into the shared cache on load', async () => {
+    localStorage.setItem(WHILE_VISIBLE_KEY, 'on')
+    render()
+    await flushCacheWrites()
+    expect(putCalls).toEqual([{ cache: PREFS_CACHE, key: CACHE_KEY, text: 'on' }])
+  })
+
+  it('mirrors "off" into the shared cache on load when nothing is stored', async () => {
+    render()
+    await flushCacheWrites()
+    expect(putCalls).toEqual([{ cache: PREFS_CACHE, key: CACHE_KEY, text: 'off' }])
+  })
+
+  it('setWhileVisible mirrors the new value into the shared cache on every change', async () => {
+    const p = render()
+    await flushCacheWrites()
+    putCalls.length = 0
+    act(() => p.setWhileVisible(true))
+    await flushCacheWrites()
+    expect(putCalls.map((c) => c.text)).toEqual(['on'])
+    act(() => p.setWhileVisible(false))
+    await flushCacheWrites()
+    expect(putCalls.map((c) => c.text)).toEqual(['on', 'off'])
+  })
+
+  it('a failing shared-cache write does not break the preference', async () => {
+    const p = render()
+    await flushCacheWrites()
+    putError = new Error('quota exceeded')
+    act(() => p.setWhileVisible(true))
+    // The localStorage value and the in-memory state still apply; only the
+    // worker-side mirror is lost (it will fall back to "off").
+    expect(p.whileVisible()).toBe(true)
+    expect(localStorage.getItem(WHILE_VISIBLE_KEY)).toBe('on')
   })
 })

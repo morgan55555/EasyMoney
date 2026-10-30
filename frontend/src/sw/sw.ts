@@ -19,6 +19,13 @@
  * only inside the Settings-toggle gesture (lib/push.enablePush) — never
  * here, never on load.
  *
+ * The while-visible preference is read from the shared Cache Storage record
+ * (lib/pushPrefs), NOT from localStorage: a service worker cannot access the
+ * page's localStorage (WorkerGlobalScope does not expose Storage —
+ * `self.localStorage` is undefined in real browsers, so a localStorage read
+ * here would silently disable the setting). The page writes the record on
+ * every load and on every change; the worker reads it fresh at push time.
+ *
  * Updates take over immediately (install → skipWaiting, activate →
  * clients.claim): without that a redeployed worker would sit "waiting" until
  * every tab in the scope is closed, and the stale worker's older click logic
@@ -28,6 +35,7 @@
 
 import { en, ru, makeT, type Dict, type Lang } from '../i18n/core'
 import { invitedToken, makeDescribe, notificationTarget } from '../lib/notificationText'
+import { readWhileVisiblePref } from '../lib/pushPrefs'
 import type { NotificationOut } from '../types'
 
 /** The notification as pushed (the backend's `notification` object). */
@@ -68,33 +76,14 @@ function targetFor(n: NotificationOut): string | null {
   return null
 }
 
-/**
- * Whether the user allowed OS notifications while an app tab is visible —
- * the client-only `easymoney.pushWhileVisible` preference (§2.14 display
- * condition). Read fresh from the page's shared localStorage on every push,
- * so a change in Settings applies from the very next push — no reload or
- * re-subscribe.
- */
-function whileVisibleAllowed(): boolean {
-  try {
-    // The page's shared localStorage (same origin as the app's pages); the
-    // WorkerGlobalScope typing predates storage on workers, hence the cast
-    // (structural: the DOM `Storage` type is unavailable in the SW build).
-    const storage = (self as unknown as {
-      localStorage?: { getItem(key: string): string | null }
-    }).localStorage
-    return storage?.getItem('easymoney.pushWhileVisible') === 'on'
-  } catch {
-    return false // storage unavailable (e.g. private mode) — keep suppression
-  }
-}
-
 /** Show the OS notification, but only when no app tab is visible (§2.14). */
 async function showWhenHidden(data: PushPayload): Promise<void> {
   const clients = await scope.clients.matchAll({ type: 'window' })
   // Suppressed while a tab is visible — unless the user opted in to
-  // notifications while visible (the preference is read at push time).
-  if (clients.some((c) => c.visibilityState === 'visible') && !whileVisibleAllowed()) return
+  // notifications while visible. The preference is mirrored by the page into
+  // the shared Cache Storage record (lib/pushPrefs) and read fresh at push
+  // time; a missing record or read error means "off" (keep suppression).
+  if (clients.some((c) => c.visibilityState === 'visible') && !(await readWhileVisiblePref())) return
 
   const lang = pickLang(data.lang)
   const t = makeT(DICTS[lang])
