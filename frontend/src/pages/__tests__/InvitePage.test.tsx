@@ -30,6 +30,7 @@ function user(p: Partial<UserOut> & Pick<UserOut, 'id'>): UserOut {
     is_admin: false,
     email_verified: true,
     preferred_language: 'en',
+    preferred_currency: null,
     avatar_url: null,
     email_change_confirmation: false,
     password_change_confirmation: false,

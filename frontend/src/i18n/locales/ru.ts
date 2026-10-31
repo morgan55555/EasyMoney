@@ -54,6 +54,8 @@ export const ru: Dict = {
   'groups.name': 'Название',
   'groups.namePlaceholder': 'Поездка в Берлин 2026',
   'groups.currency': 'Валюта',
+  'groups.currencySearch': 'Поиск по валютам…',
+  'groups.currencyNoMatch': 'Валюта не найдена',
   'groups.create': 'Создать',
   'groups.loading': 'Загрузка групп…',
   'groups.emptyTitle': 'Пока нет групп',
@@ -392,6 +394,9 @@ export const ru: Dict = {
   'settings.sectionAppearance': 'Оформление',
   'settings.language': 'Язык',
   'settings.languageHint': 'Используется для ваших писем и задаёт язык интерфейса.',
+  'settings.preferredCurrency': 'Предпочтительная валюта',
+  'settings.preferredCurrencyHint':
+    'Закрепляется в начале списка валют и используется по умолчанию при создании группы.',
   'settings.passwordChange': 'Сменить пароль',
   'settings.passwordChanged': 'Пароль изменён.',
   'settings.passwordConfirmSent': 'Ссылка для подтверждения отправлена на ваш email.',

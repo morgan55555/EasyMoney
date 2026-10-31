@@ -54,6 +54,7 @@ function me(): UserOut {
     is_admin: true,
     email_verified: true,
     preferred_language: 'en',
+    preferred_currency: null,
     avatar_url: null,
     email_change_confirmation: true,
     password_change_confirmation: true,

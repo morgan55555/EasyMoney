@@ -457,12 +457,14 @@ async def update_profile(
     user: User,
     display_name: str | None = None,
     preferred_language: str | None = None,
+    preferred_currency: str | None = None,
 ) -> User:
     """Update the profile fields a user may change themselves (§2.13).
 
-    ``display_name`` and ``preferred_language`` are applied independently;
-    ``None`` leaves the field untouched. Email and password changes go through
-    the dedicated flows (change_email / admin), never here.
+    ``display_name``, ``preferred_language`` and ``preferred_currency`` are
+    applied independently; a ``None`` argument leaves that field untouched.
+    Email and password changes go through the dedicated flows (change_email /
+    admin), never here.
     """
     changed = False
     if display_name is not None:
@@ -475,6 +477,12 @@ async def update_profile(
         if preferred_language not in ("en", "ru"):
             raise ValidationFailed("preferred_language must be 'en' or 'ru'")
         user.preferred_language = preferred_language
+        changed = True
+    if preferred_currency is not None:
+        code = preferred_currency.strip().upper()
+        if len(code) != 3 or not code.isalpha():
+            raise ValidationFailed("preferred_currency must be a 3-letter ISO code")
+        user.preferred_currency = code
         changed = True
     if not changed:
         return user

@@ -22,9 +22,11 @@ import { ApiError } from '../api/client'
 import { useI18n } from '../i18n'
 import { useChangePassword, useClearAvatar, useChangeEmail, usePatchMe, useSetAvatar, useMe } from '../query/queries'
 import { useBrowserNotify } from '../lib/browserNotify'
+import { CURRENCIES } from '../lib/currencies'
 import { disablePush, enablePush, pushSupported } from '../lib/push'
 import { useTheme, type Theme } from '../lib/theme'
 import { Avatar } from './Avatar'
+import { CurrencySelect } from './CurrencySelect'
 import { Button, ErrorText, Field, Modal, Select, TextInput } from './ui'
 
 type EmailMsg = { kind: 'info' | 'success' | 'error'; text: string } | null
@@ -42,6 +44,8 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
 
   const [name, setName] = useState('')
   const [lang, setLang] = useState<'en' | 'ru'>('en')
+  const [currency, setCurrency] = useState('')
+  const [currencyMsg, setCurrencyMsg] = useState<EmailMsg>(null)
   const [newEmail, setNewEmail] = useState('')
   const [emailMsg, setEmailMsg] = useState<EmailMsg>(null)
   const [newPassword, setNewPassword] = useState('')
@@ -63,14 +67,17 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
     setPasswordMsg(null)
     setNameMsg(null)
     setAvatarMsg(null)
+    setCurrencyMsg(null)
   }, [open])
 
-  // Populate name / language once, when me is available for this open session.
+  // Populate name / language / preferred currency once, when me is available
+  // for this open session.
   useEffect(() => {
     if (open && me.data && !initializedRef.current) {
       initializedRef.current = true
       setName(me.data.display_name)
       setLang(me.data.preferred_language === 'ru' ? 'ru' : 'en')
+      setCurrency(me.data.preferred_currency ?? '')
     }
   }, [open, me.data])
 
@@ -94,6 +101,19 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
         onSuccess: () => setNameMsg({ kind: 'success', text: t('settings.saved') }),
         onError: (e) =>
           setNameMsg({ kind: 'error', text: e instanceof ApiError ? e.message : t('settings.saveError') }),
+      },
+    )
+  }
+
+  const saveCurrency = (next: string) => {
+    setCurrency(next)
+    setCurrencyMsg(null)
+    patchMe.mutate(
+      { preferred_currency: next },
+      {
+        onSuccess: () => setCurrencyMsg({ kind: 'success', text: t('settings.saved') }),
+        onError: (e) =>
+          setCurrencyMsg({ kind: 'error', text: e instanceof ApiError ? e.message : t('settings.saveError') }),
       },
     )
   }
@@ -337,6 +357,18 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
               <option value="ru">{t('lang.ru')}</option>
             </Select>
           </Field>
+          <Field label={t('settings.preferredCurrency')} hint={t('settings.preferredCurrencyHint')}>
+            <CurrencySelect value={currency} onChange={saveCurrency} currencies={CURRENCIES} top={currency || null} />
+          </Field>
+          {currencyMsg ? (
+            <p
+              className={`text-sm ${
+                currencyMsg.kind === 'success' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+              }`}
+            >
+              {currencyMsg.text}
+            </p>
+          ) : null}
           <div className="space-y-1">
             <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('settings.theme')}</span>
             <div className="flex w-full rounded-md border border-gray-300 bg-white p-0.5 dark:border-gray-600 dark:bg-gray-800">

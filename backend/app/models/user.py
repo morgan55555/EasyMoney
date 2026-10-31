@@ -41,6 +41,9 @@ class User(BaseModel):
     avatar_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Matches avatar_data, e.g. "image/png"; null = no avatar.
     avatar_content_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Preferred currency (ISO 4217 code, e.g. "USD"); null = none set. Pinned to
+    # the top of the currency picker and used as its default in the UI.
+    preferred_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
 
     # --- relationships ---
     email_tokens: Mapped[list[EmailToken]] = relationship(

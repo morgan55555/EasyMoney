@@ -34,6 +34,9 @@ export interface UserOut {
   is_admin: boolean
   email_verified: boolean
   preferred_language: 'en' | 'ru'
+  /** Preferred currency (ISO 4217) or null; pinned to the top of the currency
+   * picker and used as its default in the UI. */
+  preferred_currency: string | null
   /** Short avatar URL or null (image served by GET /users/{id}/avatar). */
   avatar_url: string | null
   /** Effective server-side toggles (§2.13): true only when the confirmation
@@ -44,10 +47,11 @@ export interface UserOut {
 
 // --- Profile / avatar / email confirmation (§2.13) ----------------------------
 
-/** PATCH /me body; both fields optional. */
+/** PATCH /me body; all fields optional. */
 export interface MePatchBody {
   display_name?: string
   preferred_language?: 'en' | 'ru'
+  preferred_currency?: string
 }
 
 /** POST /me/avatar response. */

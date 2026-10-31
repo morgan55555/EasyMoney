@@ -54,6 +54,8 @@ export const en: Dict = {
   'groups.name': 'Name',
   'groups.namePlaceholder': 'Berlin trip 2026',
   'groups.currency': 'Currency',
+  'groups.currencySearch': 'Search currency…',
+  'groups.currencyNoMatch': 'No matching currency',
   'groups.create': 'Create',
   'groups.loading': 'Loading groups…',
   'groups.emptyTitle': 'No groups yet',
@@ -391,6 +393,9 @@ export const en: Dict = {
   'settings.sectionAppearance': 'Appearance',
   'settings.language': 'Language',
   'settings.languageHint': 'Used for your emails and sets the interface language.',
+  'settings.preferredCurrency': 'Preferred currency',
+  'settings.preferredCurrencyHint':
+    'Pinned to the top of the currency picker and used as the default when creating a group.',
   'settings.passwordChange': 'Change password',
   'settings.passwordChanged': 'Password changed.',
   'settings.passwordConfirmSent': 'A confirmation link was sent to your email.',

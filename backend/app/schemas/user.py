@@ -25,6 +25,9 @@ class UserOut(BaseModel):
     is_admin: bool = False
     email_verified: bool = True
     preferred_language: str = "en"
+    # Preferred currency (ISO 4217 code); None = none set. Pinned to the top of
+    # the currency picker and used as its default in the UI.
+    preferred_currency: str | None = None
     # Short URL or null; the image itself is served by GET /users/{id}/avatar.
     avatar_url: str | None = None
     # Effective server-side confirmation toggles (AGENTS.md §2.13): true only
@@ -35,10 +38,12 @@ class UserOut(BaseModel):
 
 
 class MePatchRequest(BaseModel):
-    # Both fields optional; send one or both. Omitted fields are unchanged.
+    # All fields optional; omitted fields are unchanged.
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
     # "en" | "ru". Changing this is the only way to set preferred_language.
     preferred_language: str | None = Field(default=None, pattern="^(en|ru)$")
+    # ISO 4217 currency code (e.g. "USD"); null clears the preference.
+    preferred_currency: str | None = Field(default=None, pattern="^[A-Z]{3}$")
 
 
 class AvatarSetResponse(BaseModel):

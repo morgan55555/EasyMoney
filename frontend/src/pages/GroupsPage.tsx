@@ -3,59 +3,23 @@
  * The list is kept live by the WS bus (any group event invalidates it).
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
-import { Badge, balanceClass, Button, Card, CardHeader, EmptyState, ErrorText, Field, SearchInput, Select, Spinner, TextInput } from '../components/ui'
+import { CurrencySelect } from '../components/CurrencySelect'
+import { Badge, balanceClass, Button, Card, CardHeader, EmptyState, ErrorText, Field, SearchInput, Spinner, TextInput } from '../components/ui'
 import { useI18n, pluralForm } from '../i18n'
 import { MEMBER_PLURAL } from '../i18n/locales'
+import { CURRENCIES } from '../lib/currencies'
 import { formatSigned } from '../lib/money'
 import { matchesAny } from '../lib/search'
-import { useCreateGroup, useGroups } from '../query/queries'
-
-/** Common currencies offered in the create form (any ISO 4217 is accepted). */
-const CURRENCIES = [
-  'EUR',
-  'USD',
-  'GBP',
-  'CHF',
-  'PLN',
-  'CZK',
-  'HUF',
-  'SEK',
-  'NOK',
-  'DKK',
-  'CAD',
-  'AUD',
-  'CNY',
-  'JPY',
-  'KRW',
-  'VND',
-  'TWD',
-  'HKD',
-  'SGD',
-  'THB',
-  'INR',
-  'AED',
-  'SAR',
-  'KWD',
-  'BHD',
-  'OMR',
-  'TND',
-  'EGP',
-  'TRY',
-  'UAH',
-  'RUB',
-  'RON',
-  'BRL',
-  'MXN',
-  'ZAR',
-]
+import { useCreateGroup, useGroups, useMe } from '../query/queries'
 
 export function GroupsPage() {
   const groups = useGroups()
   const createGroup = useCreateGroup()
+  const me = useMe()
   const navigate = useNavigate()
   const { t, locale, lang } = useI18n()
   const [name, setName] = useState('')
@@ -64,6 +28,13 @@ export function GroupsPage() {
   const [query, setQuery] = useState('')
   // "Active" (default) hides closed groups; "All" shows every group.
   const [showClosed, setShowClosed] = useState(false)
+
+  // Adopt the user's preferred currency as the form default once it is known
+  // (the profile may load after the first render).
+  const preferredCurrency = me.data?.preferred_currency ?? null
+  useEffect(() => {
+    if (preferredCurrency) setCurrency(preferredCurrency)
+  }, [preferredCurrency])
 
   const allGroups = groups.data ?? []
   // Filter by the Active/All switch, then by group name and currency code.
@@ -108,15 +79,14 @@ export function GroupsPage() {
               />
             </Field>
           </div>
-          <div className="w-full sm:w-32">
+          <div className="w-full sm:w-36">
             <Field label={t('groups.currency')}>
-              <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
+              <CurrencySelect
+                value={currency}
+                onChange={setCurrency}
+                currencies={CURRENCIES}
+                top={preferredCurrency}
+              />
             </Field>
           </div>
           <Button type="submit" busy={createGroup.isPending}>

@@ -191,6 +191,14 @@ export function IconSearch({ className }: { className?: string }) {
   )
 }
 
+export function IconChevronDown({ className }: { className?: string }) {
+  return (
+    <IconSvg className={className ?? 'h-4 w-4 shrink-0'}>
+      <polyline points="6 9 12 15 18 9" />
+    </IconSvg>
+  )
+}
+
 // --- Icon button -------------------------------------------------------------------
 
 type IconButtonVariant = 'secondary' | 'danger'
@@ -295,25 +303,23 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
  * magnifier icon and a clear button that appears while it has a value.
  * `placeholder` doubles as the accessible name; `clearLabel` names the ×.
  */
-export function SearchInput({
-  value,
-  onChange,
-  placeholder,
-  clearLabel = 'Clear search',
-  className = '',
-}: {
-  value: string
-  onChange: (value: string) => void
-  placeholder: string
-  clearLabel?: string
-  className?: string
-}) {
+export const SearchInput = forwardRef<
+  HTMLInputElement,
+  {
+    value: string
+    onChange: (value: string) => void
+    placeholder: string
+    clearLabel?: string
+    className?: string
+  }
+>(function SearchInput({ value, onChange, placeholder, clearLabel = 'Clear search', className = '' }, ref) {
   return (
     <div className={`relative ${className}`}>
       <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
       <input
         type="search"
         value={value}
+        ref={ref}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={placeholder}
@@ -331,7 +337,7 @@ export function SearchInput({
       ) : null}
     </div>
   )
-}
+})
 
 // --- Badge ------------------------------------------------------------------------
 

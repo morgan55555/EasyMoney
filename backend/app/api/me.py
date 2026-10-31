@@ -33,6 +33,7 @@ def _user_out(user: User) -> UserOut:
         is_admin=user.is_admin,
         email_verified=user.email_verified,
         preferred_language=user.preferred_language,
+        preferred_currency=user.preferred_currency,
         avatar_url=avatar_url(user.id, user.avatar_data),
         email_change_confirmation=settings.email_change_confirmation_active,
         password_change_confirmation=settings.password_change_confirmation_active,
@@ -51,7 +52,7 @@ async def patch_me(
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
     updated = await auth_service.update_profile(
-        db, user, body.display_name, body.preferred_language
+        db, user, body.display_name, body.preferred_language, body.preferred_currency
     )
     return _user_out(updated)
 
