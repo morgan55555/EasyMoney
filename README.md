@@ -19,7 +19,8 @@ Verdict: Suitable for use, with some limitations.
 
 A client–server web application for managing shared expenses — for a trip, a shared apartment, or any group. It tracks who paid for whom, who owes what to whom, suggests the minimal set of transfers to settle all debts, and keeps every member (and every open tab) in sync in real time.
 
-> **Status:** implemented. `docker compose up --build` brings up the whole stack (see Quick start).
+> **Status:** implemented. `docker compose up` brings up the whole stack from the
+> `ghcr.io/morgan55555/easymoney-{backend,frontend}` images (see Quick start).
 > See [AGENTS.md](AGENTS.md) for the full semantic rules (splitting, balances, settlements, reminders) and coding conventions.
 
 <p align="center">
@@ -107,7 +108,7 @@ A client–server web application for managing shared expenses — for a trip, a
 Prerequisites: Docker + Docker Compose.
 
 ```powershell
-docker compose up --build
+docker compose up
 ```
 
 Then:
@@ -164,7 +165,7 @@ Copy the values from the table below into `.env` (a `.env.example` will ship wit
 Receipt files live in an **S3-compatible object store** (the `app.services.storage`
 abstraction) — never on a mounted volume. The compose stack runs a LocalStack service
 and stores receipts in the `easymoney-receipts` bucket; the bucket is created
-automatically at boot, so `docker compose up --build` just works.
+automatically at boot, so `docker compose up` just works.
 
 - **Compose (default):** `STORAGE_BACKEND=s3` pointed at the `localstack` service
   (`http://localstack:4566`). LocalStack is ephemeral (no volume), so receipts live for
@@ -191,7 +192,7 @@ post-commit path that pushes the WS event.
 
 - **Compose (default):** a `redis:7-alpine` service, ephemeral (no volume). The backend
   `depends_on` it being healthy and gets `REDIS_URL=redis://redis:6379/0`. The stack
-  works as a single replica out of the box; to scale it, `docker compose up --build
+  works as a single replica out of the box; to scale it, `docker compose up
   --scale backend=2` — no sticky sessions, no per-replica state.
 - **Production:** point `REDIS_URL` at a managed Redis (ElastiCache, MemoryDB, or
   self-hosted). Pub/Sub delivery is at-most-once by design; the client's REST refetch
@@ -344,7 +345,7 @@ AGENTS.md is the binding spec; if this README and AGENTS.md ever disagree, AGENT
 
 - **Rate limiting is a proxy responsibility.** The app does no in-request throttling by design (a limiter would add a dependency); put it in front of nginx/backend (e.g. nginx `limit_req`, Caddy, or your CDN/edge WAF) if you expose it beyond your trusted network.
 - **Docs off by default.** The OpenAPI docs (`/api/docs`, `/api/redoc`, `/api/openapi.json`) are not mounted unless `EXPOSE_API_DOCS=true`, and the backend port is not published by default (only the frontend on :8081 is). Enable both per-environment as needed.
-- **Multiple backend replicas.** With `REDIS_URL` set, run any number of backend replicas behind the load balancer (compose: `docker compose up --build --scale backend=2`). All replicas share the WS event bus, the caches and the single-flight reminder lock; sticky sessions are not needed — a socket stays on the replica that accepted it, and cross-replica events arrive over the bus. With `REDIS_URL` unset, keep a single replica (the bus is in-process).
+- **Multiple backend replicas.** With `REDIS_URL` set, run any number of backend replicas behind the load balancer (compose: `docker compose up --scale backend=2`). All replicas share the WS event bus, the caches and the single-flight reminder lock; sticky sessions are not needed — a socket stays on the replica that accepted it, and cross-replica events arrive over the bus. With `REDIS_URL` unset, keep a single replica (the bus is in-process).
 
 ## License
 

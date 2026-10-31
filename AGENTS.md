@@ -353,7 +353,7 @@ A change is done when:
    - `test_ws_multiuser.py`: two sockets of the same user both receive an event; a member of another group does not.
    - `test_concurrency.py`: two expenses created "simultaneously" (parallel tasks, no shared state) → both present, sum of balances still 0.
 2. Every migration is reversible (`alembic downgrade -1` works).
-3. `docker compose up --build` from a clean checkout works without manual steps (migrations auto-run, app on :8081).
+3. `docker compose up` from a clean checkout works without manual steps (pulls the `ghcr.io/morgan55555/easymoney-{backend,frontend}` images, migrations auto-run, app on :8081).
 4. New WS event types require: backend emit + event-catalogue entry here + frontend handler.
 5. No money path uses floats (CI: `ruff` rule + grep guard in tests).
 6. **Account/admin tests pass.** `backend/tests/test_accounts.py` must cover: first-ever user becomes admin (and the migration backfills the lowest-id user when none exists); registration restriction (`REGISTRATION_OPEN=false` → 403 once a user exists, `GET /api/auth/status` reflects it); register-confirmation on/off (unverified until confirmed vs. verified immediately); email-change confirmation on/off (two mails — confirm to the new address, revert to the previous one — vs. immediate swap) plus the full revert (cancels a pending change, switches back after a confirmed one, 409s); token lifecycle (confirm marks used, resend revokes the previous pending token, expiry); SMTP kill switch (`SMTP_ENABLED=false` → no send, confirmations skipped); avatar set/clear; admin create/patch (no confirmation, last-admin guard). Frontend: theme manager, i18n preferred-language default, Avatar fallback, settings modal, register-form hiding.
@@ -369,7 +369,7 @@ A change is done when:
 | 3 | React frontend | React 18 + TS + Vite (§3.6) |
 | 4 | PostgreSQL storage | `postgres:16`, SQLAlchemy async, Alembic (§3.7) |
 | 5 | Working account system | §2.11 (register/login/refresh/revocation) |
-| 6 | Easy launch & deployment | `docker compose up --build`, auto migrations, .env defaults (README §Quick start) |
+| 6 | Easy launch & deployment | `docker compose up`, auto migrations, .env defaults (README §Quick start) |
 | 7 | Two+ tabs of the same user work | §2.11, §3.2 (per-user WS fan-out, stateless REST, on-read compute) |
 | 8 | Groups with members, invites by link or email, own currency | §2.9–2.10, §2.12 |
 | 9 | Expenses: payer, amount, equal/shares/exact split, category, date, comment, receipt | §2.1, §3.5 |

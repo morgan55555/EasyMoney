@@ -19,7 +19,9 @@ services:
       retries: 15
 
   backend:
-    build: ./backend
+    # Registry image (built from ./backend, pushed to ghcr; rebuild + push
+    # there to release a new version). Pin the tag; `latest` tracks HEAD.
+    image: ghcr.io/morgan55555/easymoney-backend:v1.20
     restart: unless-stopped
     depends_on:
       db:
@@ -109,7 +111,8 @@ services:
       start_period: 10s
 
   frontend:
-    build: ./frontend
+    # Registry image (built from ./frontend, pushed to ghcr).
+    image: ghcr.io/morgan55555/easymoney-frontend:v1.20
     restart: unless-stopped
     depends_on:
       backend:
