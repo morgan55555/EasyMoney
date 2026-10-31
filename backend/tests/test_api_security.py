@@ -164,6 +164,36 @@ class TestHostileMoneyBodies:
         response.json()  # clean, parseable 422 body
 
 
+class TestNonJsonContentTypes:
+    """P2: a body whose content type is not JSON used to reach the 422
+    renderer with raw ``bytes`` in the error's ``input`` — the stock JSON
+    encoder then raised and the 422 became a 500. Such requests must get a
+    clean, parseable 422."""
+
+    def test_form_content_type_with_json_body_is_422(self, run_db, api_client) -> None:
+        token = _register_user_1(run_db)
+        response = api_client.post(
+            "/api/groups/1/expenses",
+            content=_expense_body('"5.00"'),
+            headers={**_auth(token), "Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert response.status_code == 422
+        response.json()  # the 422 body must render (no TypeError inside it)
+
+    def test_binary_body_with_json_content_type_is_clean(self, run_db, api_client) -> None:
+        # Undecodable UTF-8 with a JSON content type is FastAPI's stock 400
+        # ("There was an error parsing the body") — clean, parseable, never a
+        # 500. Guarded here so it cannot regress into a traceback.
+        token = _register_user_1(run_db)
+        response = api_client.post(
+            "/api/groups/1/expenses",
+            content=b"\x00\x01\x02\xff\xfe",
+            headers={**_auth(token), "Content-Type": "application/json"},
+        )
+        assert response.status_code in (400, 422)
+        response.json()
+
+
 class TestWebsocketHardening:
     def test_binary_frame_is_ignored_then_ping_answered(self, run_db, api_client) -> None:
         """S-2: a binary frame must not kill the socket; a text ping after it

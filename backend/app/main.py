@@ -55,11 +55,13 @@ def _sanitize_json(value: object) -> object:
     """Make a value safe for ``allow_nan=False`` JSON rendering.
 
     Starlette's ``JSONResponse`` renders with the stock encoder and
-    ``allow_nan=False``; three things break it and would turn a 422 into a 500
-    (H-16): a raw ``NaN``/``Infinity`` float, a ``Decimal`` (echoed as the
-    ``input`` of money-field validation errors), and the ``ValueError``
-    instance a field validator raises (echoed in the error's ``ctx``). All
-    become their string form; everything else passes through.
+    ``allow_nan=False``; things break it and would turn a 422 into a 500:
+    a raw ``NaN``/``Infinity`` float (H-16), a ``Decimal`` (echoed as the
+    ``input`` of money-field validation errors), the ``ValueError`` instance
+    a field validator raises (echoed in the error's ``ctx``), and the raw
+    ``bytes`` pydantic echoes as ``input`` when the body's content type is
+    not JSON (P2). All become their string form; everything else passes
+    through.
     """
     if isinstance(value, float) and not math.isfinite(value):
         return repr(value)
@@ -67,6 +69,8 @@ def _sanitize_json(value: object) -> object:
         return str(value)
     if isinstance(value, BaseException):
         return str(value)
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode("utf-8", errors="replace")
     if isinstance(value, dict):
         return {key: _sanitize_json(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
