@@ -83,3 +83,17 @@ def to_minor(amount: Decimal, currency: str) -> int:
 def from_minor(minor: int, currency: str) -> Decimal:
     """Convert minor units (int) back to a ``Decimal`` amount."""
     return Decimal(minor).scaleb(-minor_digits(currency))
+
+
+def normalize_money(amount: Decimal, currency: str) -> Decimal:
+    """Re-scale a *stored* amount to the currency's exact minor digits.
+
+    Money columns are ``NUMERIC(14,3)`` (§3.7), so a 2-digit-currency value
+    read back from the database carries scale 3 (``5.000``) and would trip
+    ``to_minor``'s strict sub-precision check — which is there to reject
+    user *input* finer than the minor unit, not canonical stored values.
+    Quantizing restores the canonical spelling (``5.00``) without ever
+    rejecting.
+    """
+    quantum = Decimal(1).scaleb(-minor_digits(currency))
+    return amount.quantize(quantum, rounding=ROUND_HALF_UP)

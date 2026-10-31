@@ -294,7 +294,13 @@ async def update_expense(
         raise Conflict("The expense has been deleted")
 
     method = data.split_method if data.split_method is not None else expense.split_method
-    amount = data.amount if data.amount is not None else expense.amount
+    if data.amount is not None:
+        amount = data.amount
+    else:
+        # The NUMERIC(14,3) column returns a scale-3 Decimal (``5.000`` for
+        # EUR); re-scale it to the currency's canonical minor digits before
+        # the re-split path, whose strict precision check targets user input.
+        amount = currency_service.normalize_money(expense.amount, group.currency)
     payer_id = data.payer_id if data.payer_id is not None else expense.payer_id
     if data.participants is not None:
         participant_ids = {p.user_id for p in data.participants}
