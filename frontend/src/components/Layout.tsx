@@ -65,6 +65,9 @@ export function Layout() {
   useEffect(() => {
     if (me.isError && (me.error as { status?: number })?.status === 401) {
       clearTokens()
+      // Session end → the shared handler clears the previous user's caches
+      // (see the AUTH_EXPIRED_EVENT listener in query/queries.ts).
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
       navigate('/login', { replace: true })
     }
   }, [me.isError, me.error, navigate])
@@ -79,6 +82,10 @@ export function Layout() {
       }
     }
     clearTokens()
+    // Every session end goes through AUTH_EXPIRED_EVENT so the previous
+    // user's query caches are cleared in one place (query/queries.ts) —
+    // a stale `me` must never survive into the next account's login.
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
     navigate('/login', { replace: true })
   }
 

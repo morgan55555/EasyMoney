@@ -113,8 +113,13 @@ export default function App() {
           path="/"
           element={
             <RequireAuth>
+              {/* Above the gate on purpose: the gate renders in place of the
+                  shell, so it must adopt me.preferred_language too (§2.13).
+                  Mounted only while unverified the gate fell back to the
+                  stored public-page choice and — worse — to whatever a stale
+                  cached /me of a previous account applied. */}
+              <PreferredLanguageSync />
               <RequireVerified>
-                <PreferredLanguageSync />
                 <Layout />
               </RequireVerified>
             </RequireAuth>

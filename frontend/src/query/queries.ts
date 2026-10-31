@@ -17,6 +17,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query'
 
+import { AUTH_EXPIRED_EVENT } from '../api/client'
 import * as api from '../api/endpoints'
 import { invalidateAvatar } from '../lib/avatarCache'
 import { initSound, playNotification } from '../lib/sound'
@@ -66,6 +67,20 @@ export const queryClient = new QueryClient({
       refetchOnWindowFocus: false, // WS pushes keep us current
     },
   },
+})
+
+// A terminated session must not leave the previous user's cached data behind.
+// The query client lives for the whole document, so when the next account
+// signs in on the same tab (logout → register / login, no reload) it would
+// otherwise read the previous user's stale `me` (fresh within the 30 s
+// staleTime): PreferredLanguageSync would apply the wrong user's
+// preferred_language to the verify gate, the header would show the wrong
+// identity, and the admin link could flash. Every session-end path
+// (explicit logout, 401-on-/me, refresh failure, WS 401) fires
+// AUTH_EXPIRED_EVENT; clearing all caches here means the next login starts
+// from an empty client.
+window.addEventListener(AUTH_EXPIRED_EVENT, () => {
+  queryClient.removeQueries()
 })
 
 // --- WS -> cache wiring ----------------------------------------------------------
