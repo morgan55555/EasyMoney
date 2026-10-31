@@ -14,8 +14,19 @@
 
 /** Cache name shared between the pages and the service worker. */
 export const PREFS_CACHE = 'easymoney:prefs'
-/** Cache key of the while-visible preference (text value `on` / `off`). */
-export const WHILE_VISIBLE_KEY = 'while-visible'
+/**
+ * Cache key of the while-visible preference (text value `on` / `off`).
+ *
+ * Absolute and origin-rooted ON PURPOSE: a Cache Storage key string is
+ * resolved against the *issuer's* base URL — a page at `/groups/15` stores a
+ * bare relative key under `/groups/while-visible` while the service worker
+ * (script URL `/sw.js`) would read `/while-visible`, so the mirror silently
+ * never matched on any non-root route and the toggle changed nothing. Pinning
+ * the key to the origin root makes page and worker resolve the same record
+ * (there is no `<base>` element in the document, so both resolve to
+ * `https://<host>/while-visible`).
+ */
+export const WHILE_VISIBLE_KEY = '/while-visible'
 
 /** Mirror the preference into the shared cache (best effort). */
 export async function writeWhileVisiblePref(on: boolean): Promise<void> {

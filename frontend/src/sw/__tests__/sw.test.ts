@@ -56,7 +56,14 @@ interface WinFakes {
 function installFakes(clients: Array<Record<string, unknown>> = []): WinFakes {
   const fakes: WinFakes = {
     clients: {
-      matchAll: vi.fn(async () => clients),
+      // Mirror the browser's semantics: without `includeUncontrolled`, only
+      // controlled clients are returned. A tab committed while the worker was
+      // idle-terminated is visible yet uncontrolled, and a controlled-only
+      // matchAll is blind to it — exactly the push-while-open bug §2.14.
+      matchAll: vi.fn(
+        async (opts?: { type?: string; includeUncontrolled?: boolean }) =>
+          clients.filter((c) => (opts?.includeUncontrolled ? true : c.controlled !== false)),
+      ),
       openWindow: vi.fn(async () => ({})),
       claim: vi.fn(),
     },
@@ -194,7 +201,39 @@ describe('push handler', () => {
     captured.push!(event)
 
     await waitUntil.mock.calls[0][0]
+    // The gate must query uncontrolled clients too, or it is blind to a tab
+    // that is visible but not yet controlled (see the uncontrolled test below).
+    expect(fakes.clients.matchAll).toHaveBeenCalledWith({ type: 'window', includeUncontrolled: true })
     expect(fakes.registration.showNotification).not.toHaveBeenCalled()
+  })
+
+  it('suppresses a visible but UNCONTROLLED tab (hard reload against an idle-terminated worker)', async () => {
+    await importSw()
+    // A hard reload committed while the worker was idle-terminated leaves the
+    // document without a controller (reviving the worker does not re-run
+    // activate/claim()): the tab is visible yet uncontrolled. A controlled-only
+    // matchAll returns [] here and the push would fire with the app open.
+    const fakes = installFakes([{ visibilityState: 'visible', controlled: false }])
+    setSharedPref(null)
+    const { event, waitUntil } = pushEvent(EXPENSE_PAYLOAD)
+
+    captured.push!(event)
+
+    await waitUntil.mock.calls[0][0]
+    expect(fakes.clients.matchAll).toHaveBeenCalledWith({ type: 'window', includeUncontrolled: true })
+    expect(fakes.registration.showNotification).not.toHaveBeenCalled()
+  })
+
+  it('shows a visible but uncontrolled tab when the notify-while-visible preference is on', async () => {
+    await importSw()
+    const fakes = installFakes([{ visibilityState: 'visible', controlled: false }])
+    setSharedPref('on')
+    const { event, waitUntil } = pushEvent(EXPENSE_PAYLOAD)
+
+    captured.push!(event)
+
+    await waitUntil.mock.calls[0][0]
+    expect(fakes.registration.showNotification).toHaveBeenCalledTimes(1)
   })
 
   it('shows the notification while an app tab is visible when the notify-while-visible preference is on', async () => {

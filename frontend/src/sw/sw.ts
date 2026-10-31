@@ -15,9 +15,14 @@
  * `easymoney.pushWhileVisible` preference on. While any tab is visible and
  * the preference is off, the bell badge + sound already inform the user (no
  * double-alerting); with no clients at all (app closed) the notification
- * shows regardless of the preference. The push-permission prompt is raised
- * only inside the Settings-toggle gesture (lib/push.enablePush) — never
- * here, never on load.
+ * shows regardless of the preference. "Visible" is checked with
+ * `matchAll({ type: 'window', includeUncontrolled: true })`: a tab can be
+ * visible yet uncontrolled (a hard reload committed while the worker was
+ * idle-terminated commits a document with no controller, and reviving the
+ * worker does not re-run activate/claim()), so a controlled-only match is
+ * blind to exactly the tab the user is looking at. The push-permission
+ * prompt is raised only inside the Settings-toggle gesture
+ * (lib/push.enablePush) — never here, never on load.
  *
  * The while-visible preference is read from the shared Cache Storage record
  * (lib/pushPrefs), NOT from localStorage: a service worker cannot access the
@@ -78,7 +83,13 @@ function targetFor(n: NotificationOut): string | null {
 
 /** Show the OS notification, but only when no app tab is visible (§2.14). */
 async function showWhenHidden(data: PushPayload): Promise<void> {
-  const clients = await scope.clients.matchAll({ type: 'window' })
+  // `includeUncontrolled` is load-bearing (req 7, §2.14): after a hard reload
+  // committed while the worker was idle-terminated, the new document has no
+  // controller — reviving the worker does NOT re-run activate/claim() — so a
+  // controlled-only matchAll sees [] for the very tab the user is looking at
+  // and the push fires with the app open. The click path below already
+  // includes uncontrolled clients for the same reason.
+  const clients = await scope.clients.matchAll({ type: 'window', includeUncontrolled: true })
   // Suppressed while a tab is visible — unless the user opted in to
   // notifications while visible. The preference is mirrored by the page into
   // the shared Cache Storage record (lib/pushPrefs) and read fresh at push
