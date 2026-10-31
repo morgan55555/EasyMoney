@@ -10,6 +10,13 @@
 > Yep — it runs fully locally, with no Claude, ChatGPT, Gemini, or other cloud-based LLMs involved.
 > Feel free to suggest improvements, point out issues, or share ideas on how I could make the project better!
 
+Code structure and overall quality are pretty decent.
+Even with a 128k context length, it can maintain stable output quality without excessive hallucinations or major errors.
+It can still introduce bugs and make mistakes, but it is also capable of fixing them on the fly when proper testing tools are available — for example, browser DevTools access in web development.
+It can easily implement something like Web Push Notifications, but struggles to get it right on the first try when it can't actually see the notifications. Since it can't test the result itself, it has a harder time identifying and fixing the bugs.
+
+Verdict: Suitable for use, with some limitations.
+
 A client–server web application for managing shared expenses — for a trip, a shared apartment, or any group. It tracks who paid for whom, who owes what to whom, suggests the minimal set of transfers to settle all debts, and keeps every member (and every open tab) in sync in real time.
 
 > **Status:** implemented. `docker compose up --build` brings up the whole stack (see Quick start).
