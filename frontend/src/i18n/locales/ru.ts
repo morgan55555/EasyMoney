@@ -98,12 +98,11 @@ export const ru: Dict = {
 
   // --- Настройки группы (только владелец, §2.7) ---------------------------------------------
   'settings.nameLabel': 'Название группы',
-  'settings.rename': 'Переименовать',
   'settings.remindersTitle': 'Напоминания о долгах',
   'settings.overdueLabel': 'Сколько дней долг считается просроченным',
-  'settings.overdueHint': 'Пусто — стандарт приложения ({{days}} дн.).',
+  'settings.overdueHint': 'Стандарт приложения: {{days}} дн.',
   'settings.intervalLabel': 'Сколько дней между повторными напоминаниями',
-  'settings.intervalHint': 'Пусто — стандарт приложения ({{days}} дн.); минимум {{min}}.',
+  'settings.intervalHint': 'Стандарт приложения: {{days}} дн.; минимум {{min}}.',
   'settings.ownerTitle': 'Владелец',
   'settings.ownerSelect': 'Выберите нового владельца…',
   'settings.ownerHint': 'Новый владелец получает права владельца (настройки, переименование, закрытие). Вы останетесь в группе участником.',

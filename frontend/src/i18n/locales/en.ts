@@ -98,12 +98,11 @@ export const en: Dict = {
 
   // --- Group settings (owner only, §2.7) ---------------------------------------------
   'settings.nameLabel': 'Group name',
-  'settings.rename': 'Rename',
   'settings.remindersTitle': 'Debt reminders',
   'settings.overdueLabel': 'Days before a debt is overdue',
-  'settings.overdueHint': 'Empty = the app default ({{days}} days).',
+  'settings.overdueHint': 'App default: {{days}} days.',
   'settings.intervalLabel': 'Days between repeat reminders',
-  'settings.intervalHint': 'Empty = the app default ({{days}} days); at least {{min}}.',
+  'settings.intervalHint': 'App default: {{days}} days; at least {{min}}.',
   'settings.ownerTitle': 'Owner',
   'settings.ownerSelect': 'Select a new owner…',
   'settings.ownerHint': 'The new owner gets the owner-only controls (settings, rename, close). You stay in the group as a member.',

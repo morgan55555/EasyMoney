@@ -1,11 +1,16 @@
 /**
  * Group Settings tab (owner only — AGENTS.md §2.7, §2.9).
  *
- * Renames the group, edits the per-group reminder thresholds (an empty field
- * clears the override back to the app-wide default; the interval can never be
- * set below the `REMINDER_INTERVAL_DAYS_MIN` floor), transfers ownership to
- * another current member, and hosts the close/reopen lifecycle actions that
- * used to sit in the page header. Every section saves independently.
+ * Renames the group, edits the per-group reminder thresholds, transfers
+ * ownership to another current member, and hosts the close/reopen lifecycle
+ * actions that used to sit in the page header. Every field saves independently
+ * through a "Save" button on its right (the same pattern as the user Settings
+ * modal).
+ *
+ * The two reminder fields are never empty: they always show a concrete number —
+ * the group's own override when set, otherwise the app-wide default — and saving
+ * stores that number on the group. The interval can never be set below the
+ * `REMINDER_INTERVAL_DAYS_MIN` floor.
  */
 
 import { useState } from 'react'
@@ -26,10 +31,10 @@ import { Button, Card, CardHeader, ErrorText, Field, Modal, Select, TextInput } 
 
 const MAX_DAYS = 3650
 
-/** Parse a days input: `''` = null (app default), out-of-range = undefined. */
-function parseDays(value: string, min: number, max: number): number | null | undefined {
+/** Parse a days input: empty or out-of-range = undefined (invalid), else the int. */
+function parseDays(value: string, min: number, max: number): number | undefined {
   const trimmed = value.trim()
-  if (trimmed === '') return null
+  if (trimmed === '') return undefined
   const n = Number(trimmed)
   if (!Number.isInteger(n) || n < min || n > max) return undefined
   return n
@@ -62,21 +67,22 @@ export function GroupSettingsPanel({ groupId }: { groupId: number }) {
   const others = (members.data ?? []).filter((m) => !m.is_owner)
   const targetName = (members.data ?? []).find((m) => m.id === target)?.display_name ?? ''
 
-  const storedOverdue = g.debt_overdue_days === null ? '' : String(g.debt_overdue_days)
-  const storedInterval = g.reminder_interval_days === null ? '' : String(g.reminder_interval_days)
+  // The reminder fields are always concrete: the group's override when set,
+  // otherwise the app-wide default — so they never render empty.
+  const storedOverdue = String(g.debt_overdue_days ?? g.debt_overdue_days_default)
+  const storedInterval = String(g.reminder_interval_days ?? g.reminder_interval_days_default)
   const nameShown = nameDraft ?? g.name
   const overdueShown = overdueDraft ?? storedOverdue
   const intervalShown = intervalDraft ?? storedInterval
 
   const overdueValue = parseDays(overdueShown, 0, MAX_DAYS)
   const intervalValue = parseDays(intervalShown, g.reminder_interval_days_min, MAX_DAYS)
-  const settingsValid = overdueValue !== undefined && intervalValue !== undefined
-  const settingsDirty = overdueShown.trim() !== storedOverdue || intervalShown.trim() !== storedInterval
-  const nameDirty = nameShown.trim().length > 0 && nameShown.trim() !== g.name
+  const overdueValid = overdueValue !== undefined
+  const intervalValid = intervalValue !== undefined
 
   const saveName = async () => {
     const n = nameShown.trim()
-    if (!n || n === g.name) return
+    if (!n) return
     setError('')
     try {
       await rename.mutateAsync(n)
@@ -86,8 +92,10 @@ export function GroupSettingsPanel({ groupId }: { groupId: number }) {
     }
   }
 
+  // Both fields are sent together (the settings endpoint takes the full state);
+  // each Save button persists the current values of both.
   const saveSettings = async () => {
-    if (!settingsValid) return
+    if (overdueValue === undefined || intervalValue === undefined) return
     setError('')
     try {
       await settings.mutateAsync({
@@ -141,14 +149,22 @@ export function GroupSettingsPanel({ groupId }: { groupId: number }) {
       <Card>
         <CardHeader title={t('settings.nameLabel')} />
         <div className="px-4 py-3">
-          <TextInput value={nameShown} onChange={(e) => setNameDraft(e.target.value)} />
-          {nameDirty ? (
-            <div className="flex justify-end mt-3">
-              <Button busy={rename.isPending} onClick={() => void saveName()}>
-                {t('settings.rename')}
+          <Field
+            label={t('settings.nameLabel')}
+            trailing={
+              <Button onClick={() => void saveName()} busy={rename.isPending} disabled={!nameShown.trim()}>
+                {t('settings.save')}
               </Button>
-            </div>
-          ) : null}
+            }
+          >
+            <TextInput
+              value={nameShown}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void saveName()
+              }}
+            />
+          </Field>
         </div>
       </Card>
 
@@ -159,6 +175,15 @@ export function GroupSettingsPanel({ groupId }: { groupId: number }) {
           <Field
             label={t('settings.overdueLabel')}
             hint={t('settings.overdueHint', { days: g.debt_overdue_days_default })}
+            trailing={
+              <Button
+                onClick={() => void saveSettings()}
+                busy={settings.isPending}
+                disabled={!overdueValid}
+              >
+                {t('settings.save')}
+              </Button>
+            }
           >
             <TextInput
               type="number"
@@ -166,6 +191,9 @@ export function GroupSettingsPanel({ groupId }: { groupId: number }) {
               max={MAX_DAYS}
               value={overdueShown}
               onChange={(e) => setOverdueDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void saveSettings()
+              }}
             />
           </Field>
           <Field
@@ -174,6 +202,15 @@ export function GroupSettingsPanel({ groupId }: { groupId: number }) {
               days: g.reminder_interval_days_default,
               min: g.reminder_interval_days_min,
             })}
+            trailing={
+              <Button
+                onClick={() => void saveSettings()}
+                busy={settings.isPending}
+                disabled={!intervalValid}
+              >
+                {t('settings.save')}
+              </Button>
+            }
           >
             <TextInput
               type="number"
@@ -181,19 +218,11 @@ export function GroupSettingsPanel({ groupId }: { groupId: number }) {
               max={MAX_DAYS}
               value={intervalShown}
               onChange={(e) => setIntervalDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void saveSettings()
+              }}
             />
           </Field>
-          {settingsDirty ? (
-            <div className="flex justify-end">
-              <Button
-                disabled={!settingsValid}
-                busy={settings.isPending}
-                onClick={() => void saveSettings()}
-              >
-                {t('settings.save')}
-              </Button>
-            </div>
-          ) : null}
         </div>
       </Card>
 
@@ -218,9 +247,7 @@ export function GroupSettingsPanel({ groupId }: { groupId: number }) {
             <div className="flex items-center justify-between gap-2 pt-1">
               <div className="flex items-center gap-2 min-w-0">
                 <Avatar
-                  url={
-                    (members.data ?? []).find((m) => m.id === target)?.avatar_url ?? null
-                  }
+                  url={(members.data ?? []).find((m) => m.id === target)?.avatar_url ?? null}
                   name={targetName}
                   size={28}
                 />
