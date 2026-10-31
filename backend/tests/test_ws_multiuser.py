@@ -13,6 +13,10 @@ running stack.
 Covered:
   * both open tabs of one user receive the same ``expense.created`` event,
     with a correct fresh ``group_balances`` snapshot (sum zero on the wire);
+  * REST/socket parity: a fresh REST read of the group balances
+    (``load_balances_wire``, what ``GET /groups/{id}/balances`` serves) equals
+    the ``group_balances`` wire dict just pushed to every subscribed tab —
+    both paths compute on read and converge on one value (reqs 7, 14);
   * the bell: participants get ``notification.created`` (one row per user),
     non-participants do not;
   * deleting an expense bell-notifies its participants with an
@@ -44,6 +48,7 @@ from app.models.membership import Membership
 from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.expenses import ExpenseCreate, ParticipantIn
+from app.services import balances as balances_service
 from app.services import expenses as expenses_service
 from app.services import groups as groups_service
 from app.services import invites as invites_service
@@ -264,6 +269,24 @@ async def _run(factory: async_sessionmaker, manager: ConnectionManager) -> None:
     balances = _balances(dave_created[0])
     assert balances == {ALICE: "40.00", BOB: "-40.00", DAVE: "0.00"}
     assert sum(Decimal(v) for v in balances.values()) == Decimal(0)
+
+    # REST/socket parity (reqs 7, 14): a fresh REST read of the same group —
+    # what `GET /groups/{id}/balances` serves — must equal the
+    # `group_balances` wire dict just pushed to every subscribed tab. Balances
+    # are computed on read (invariant 4), so both paths converge on one value;
+    # no state has changed between the push and this read.
+    async with factory() as db:
+        group = await db.get(Group, group_id)
+        assert group is not None
+        rest = await balances_service.load_balances_wire(db, group)
+    assert rest["balances"] == [
+        {"user_id": ALICE, "display_name": "User 1", "balance": "40.00", "avatar_url": None},
+        {"user_id": BOB, "display_name": "User 2", "balance": "-40.00", "avatar_url": None},
+        {"user_id": DAVE, "display_name": "User 4", "balance": "0.00", "avatar_url": None},
+    ]
+    for sock in (alice_tab1, alice_tab2, bob_tab, dave_tab):
+        pushed = _of_type(sock, "expense.created", group_id)[-1]["data"]["group_balances"]
+        assert pushed == rest
 
     # dave was a member but not a participant: no expense bell; and §2.6
     # excludes the joiner from the member.joined fan-out, so his tab holds no

@@ -830,6 +830,60 @@ async def _avatar_rejects_bad_type_and_oversize(
     assert (await _get_user(factory, 1)).avatar_data is None
 
 
+async def _preferred_currency_profile(factory: async_sessionmaker) -> None:
+    """C2: the preferred-currency profile field (AGENTS.md §2.13).
+
+    Settable via ``update_profile`` (what ``PATCH /me`` calls): normalized
+    ``strip().upper()``; ``None``/omitted leaves the field untouched (no
+    clear path); invalid values raise ``ValidationFailed`` (422) and write
+    nothing. The API gate (``MePatchRequest``) rejects lowercase /
+    non-ASCII / wrong-length codes before the service sees them, and
+    ``GET /me`` (``UserOut``) carries the field."""
+    from pydantic import ValidationError
+
+    from app.api.me import _user_out
+    from app.schemas.user import MePatchRequest
+
+    user = await _mk_user(factory, 1)
+    # Starts unset.
+    assert user.preferred_currency is None
+    # Set via update_profile: normalized with strip().upper().
+    async with factory() as db:
+        u = await db.get(User, 1)
+        assert u is not None
+        await auth_service.update_profile(db, u, preferred_currency="  eur ")
+    fresh = await _get_user(factory, 1)
+    assert fresh.preferred_currency == "EUR"
+    # null / omitted leaves the field untouched (no clear path).
+    async with factory() as db:
+        u = await db.get(User, 1)
+        assert u is not None
+        await auth_service.update_profile(
+            db, u, display_name="Alice", preferred_currency=None
+        )
+    fresh = await _get_user(factory, 1)
+    assert fresh.preferred_currency == "EUR"
+    assert fresh.display_name == "Alice"
+    # Invalid values 422 and write nothing.
+    for bad in ("US", "EURO", "123", "  EURR  "):
+        with pytest.raises(ValidationFailed):
+            async with factory() as db:
+                u = await db.get(User, 1)
+                assert u is not None
+                await auth_service.update_profile(db, u, preferred_currency=bad)
+    assert (await _get_user(factory, 1)).preferred_currency == "EUR"
+    # The API gate rejects lowercase / non-ASCII / wrong-length codes
+    # (422 at the schema) and passes valid ones; null is accepted (no-op).
+    for bad in ("eur", "€UR", "EU", "EURO"):
+        with pytest.raises(ValidationError):
+            MePatchRequest(preferred_currency=bad)
+    assert MePatchRequest(preferred_currency="EUR").preferred_currency == "EUR"
+    assert MePatchRequest(preferred_currency=None).preferred_currency is None
+    # GET /me projection carries the field.
+    out = _user_out(fresh)
+    assert out.preferred_currency == "EUR"
+
+
 # --- 8. admin create / patch / lockout / stats ------------------------------
 
 
@@ -1163,6 +1217,10 @@ def test_avatar_rejects_bad_type_and_oversize(
         await _avatar_rejects_bad_type_and_oversize(factory, monkeypatch)
 
     run_db(_s)
+
+
+def test_preferred_currency_profile(run_db: Any) -> None:
+    run_db(_preferred_currency_profile)
 
 
 def test_admin_create_user_without_confirmation(run_db: Any) -> None:

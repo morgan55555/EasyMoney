@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 import jwt
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from starlette.websockets import WebSocketDisconnect
 
 from app.core import security
 from app.core.config import get_settings
@@ -77,6 +78,10 @@ def _expense_body(amount: str) -> str:
         '{"payer_id":1,"description":"x","date":"2026-01-01",'
         f'"participants":[{{"user_id":1}}],"amount":{amount}}}'
     )
+
+
+async def _noop(factory: async_sessionmaker[AsyncSession]) -> None:
+    pass
 
 
 class TestCraftedTokens:
@@ -166,5 +171,27 @@ class TestWebsocketHardening:
         token = _register_user_1(run_db)
         with api_client.websocket_connect(f"/ws?token={token}") as ws:
             ws.send_bytes(b"\x00\x01\x02")
+            ws.send_text("ping")
+            assert ws.receive_text() == "pong"
+
+    def test_missing_or_bad_token_is_a_clean_close(self, run_db, api_client) -> None:
+        """S14: a handshake with no token, or one that fails to decode, is a
+        clean 4401 close (never a traceback / crash). The socket is never
+        registered, so no event can fan out to it."""
+        run_db(_noop)
+        for url in ("/ws", "/ws?token=garbage-not-a-jwt"):
+            with api_client.websocket_connect(url) as ws:
+                with pytest.raises(WebSocketDisconnect) as exc_info:
+                    ws.receive_text()
+                assert exc_info.value.code == 4401
+
+    def test_malformed_json_is_ignored_then_ping_answered(self, run_db, api_client) -> None:
+        """S14: a text frame that is not the literal ping (e.g. malformed
+        JSON) is not parsed at all and must not kill the socket; a ping after
+        it still gets a pong."""
+        token = _register_user_1(run_db)
+        with api_client.websocket_connect(f"/ws?token={token}") as ws:
+            ws.send_text('{"type": "expense.created"')  # malformed JSON
+            ws.send_text("not json at all {{{")
             ws.send_text("ping")
             assert ws.receive_text() == "pong"

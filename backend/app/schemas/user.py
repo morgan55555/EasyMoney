@@ -42,7 +42,8 @@ class MePatchRequest(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
     # "en" | "ru". Changing this is the only way to set preferred_language.
     preferred_language: str | None = Field(default=None, pattern="^(en|ru)$")
-    # ISO 4217 currency code (e.g. "USD"); null clears the preference.
+    # ISO 4217 currency code (e.g. "USD"). null / omitted leaves the
+    # preference untouched — there is no clear path (AGENTS.md §2.13).
     preferred_currency: str | None = Field(default=None, pattern="^[A-Z]{3}$")
 
 
