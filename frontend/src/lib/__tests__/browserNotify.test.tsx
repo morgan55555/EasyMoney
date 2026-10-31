@@ -13,6 +13,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BrowserNotifyProvider, useBrowserNotify } from '../browserNotify'
+import { SOUND_STORAGE_KEY } from '../sound'
 import { PREFS_CACHE, WHILE_VISIBLE_KEY as CACHE_KEY } from '../pushPrefs'
 
 // React 18: tell the runtime we are in a test environment so `act` is allowed.
@@ -20,6 +21,7 @@ import { PREFS_CACHE, WHILE_VISIBLE_KEY as CACHE_KEY } from '../pushPrefs'
 
 const KEY = 'easymoney.browserNotify'
 const WHILE_VISIBLE_KEY = 'easymoney.pushWhileVisible'
+const SOUND_KEY = SOUND_STORAGE_KEY
 
 // The shared Cache Storage record the service worker reads at push time
 // (lib/pushPrefs): a fake that records every `put`, whatever happy-dom
@@ -51,6 +53,7 @@ describe('BrowserNotifyProvider', () => {
   beforeEach(() => {
     localStorage.removeItem(KEY)
     localStorage.removeItem(WHILE_VISIBLE_KEY)
+    localStorage.removeItem(SOUND_KEY)
     installCachesFake()
   })
 
@@ -60,6 +63,7 @@ describe('BrowserNotifyProvider', () => {
     root = null
     localStorage.removeItem(KEY)
     localStorage.removeItem(WHILE_VISIBLE_KEY)
+    localStorage.removeItem(SOUND_KEY)
     Object.defineProperty(globalThis, 'caches', { value: undefined, configurable: true, writable: true })
   })
 
@@ -68,6 +72,8 @@ describe('BrowserNotifyProvider', () => {
     setEnabled: (next: boolean) => void
     whileVisible: () => boolean
     setWhileVisible: (next: boolean) => void
+    soundOn: () => boolean
+    setSoundOn: (next: boolean) => void
   } {
     const el = document.createElement('div')
     document.body.appendChild(el)
@@ -77,12 +83,17 @@ describe('BrowserNotifyProvider', () => {
     let set: (next: boolean) => void = () => undefined
     let wv = false
     let setWv: (next: boolean) => void = () => undefined
+    let sound = true
+    let setSound: (next: boolean) => void = () => undefined
     function Probe() {
-      const { enabled: e, setEnabled: s, whileVisible: w, setWhileVisible: sw } = useBrowserNotify()
+      const { enabled: e, setEnabled: s, whileVisible: w, setWhileVisible: sw, soundOn: so, setSoundOn: sso } =
+        useBrowserNotify()
       enabled = e
       set = s
       wv = w
       setWv = sw
+      sound = so
+      setSound = sso
       return null
     }
     act(() => {
@@ -93,6 +104,8 @@ describe('BrowserNotifyProvider', () => {
       setEnabled: set,
       whileVisible: () => wv,
       setWhileVisible: setWv,
+      soundOn: () => sound,
+      setSoundOn: setSound,
     }
   }
 
@@ -175,6 +188,22 @@ describe('BrowserNotifyProvider', () => {
     }
   })
 
+  it('defaults on even when localStorage is unavailable (sound is the long-standing behavior)', () => {
+    const real = Storage.prototype.getItem
+    Storage.prototype.getItem = () => {
+      throw new Error('storage unavailable')
+    }
+    try {
+      const p = render()
+      expect(p.soundOn()).toBe(true)
+      // Persisting must not throw either — the in-memory choice still applies.
+      act(() => p.setSoundOn(false))
+      expect(p.soundOn()).toBe(false)
+    } finally {
+      Storage.prototype.getItem = real
+    }
+  })
+
   it('whileVisible defaults to off when nothing is stored', () => {
     const p = render()
     expect(p.whileVisible()).toBe(false)
@@ -223,6 +252,67 @@ describe('BrowserNotifyProvider', () => {
       window.dispatchEvent(new StorageEvent('storage', { key: KEY, newValue: 'on' }))
     })
     expect(p.enabled()).toBe(true)
+    expect(p.whileVisible()).toBe(true)
+  })
+
+  // --- soundOn (the in-app notification sound, §2.14/§3.2) ---
+
+  it('soundOn defaults to enabled when nothing is stored', () => {
+    const p = render()
+    expect(p.soundOn()).toBe(true)
+  })
+
+  it('soundOn starts disabled when the stored preference is "off"', () => {
+    localStorage.setItem(SOUND_KEY, 'off')
+    const p = render()
+    expect(p.soundOn()).toBe(false)
+  })
+
+  it('treats any other stored sound value as enabled', () => {
+    localStorage.setItem(SOUND_KEY, 'garbage')
+    const p = render()
+    expect(p.soundOn()).toBe(true)
+  })
+
+  it('setSoundOn(false) turns the preference off and persists it', () => {
+    const p = render()
+    act(() => p.setSoundOn(false))
+    expect(p.soundOn()).toBe(false)
+    expect(localStorage.getItem(SOUND_KEY)).toBe('off')
+  })
+
+  it('setSoundOn(true) turns the preference back on and persists it', () => {
+    localStorage.setItem(SOUND_KEY, 'off')
+    const p = render()
+    act(() => p.setSoundOn(true))
+    expect(p.soundOn()).toBe(true)
+    expect(localStorage.getItem(SOUND_KEY)).toBe('on')
+  })
+
+  it('syncs soundOn from a storage event fired by another tab', () => {
+    const p = render()
+    expect(p.soundOn()).toBe(true)
+    // Another tab of the same browser silenced the sound (the browser fires
+    // the `storage` event only in the *other* tabs, never the writer).
+    localStorage.setItem(SOUND_KEY, 'off')
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: SOUND_KEY, newValue: 'off' }))
+    })
+    expect(p.soundOn()).toBe(false)
+    // ...and the other preferences must NOT have moved with it.
+    expect(p.enabled()).toBe(false)
+    expect(p.whileVisible()).toBe(false)
+  })
+
+  it('a storage event for soundOn does not move the push preferences', () => {
+    const p = render()
+    act(() => p.setWhileVisible(true))
+    localStorage.setItem(SOUND_KEY, 'off')
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: SOUND_KEY, newValue: 'off' }))
+    })
+    expect(p.soundOn()).toBe(false)
+    expect(p.enabled()).toBe(false)
     expect(p.whileVisible()).toBe(true)
   })
 

@@ -76,6 +76,7 @@ beforeEach(() => {
   localStorage.removeItem('easymoney.theme')
   localStorage.removeItem('easymoney.browserNotify')
   localStorage.removeItem('easymoney.pushWhileVisible')
+  localStorage.removeItem('easymoney.notifySound')
   // Web Push defaults: unsupported (toggle disabled with the unsupported
   // hint), enable/disable inert. The toggle tests override what they need.
   pushSupportedMock.mockReturnValue(false)
@@ -88,6 +89,7 @@ afterEach(() => {
   localStorage.removeItem('easymoney.theme')
   localStorage.removeItem('easymoney.browserNotify')
   localStorage.removeItem('easymoney.pushWhileVisible')
+  localStorage.removeItem('easymoney.notifySound')
   document.documentElement.classList.remove('dark')
   vi.clearAllMocks()
 })
@@ -258,6 +260,31 @@ describe('SettingsModal', () => {
       await flush()
       expect(wv.checked).toBe(false)
       expect(localStorage.getItem('easymoney.pushWhileVisible')).toBe('off')
+    })
+  })
+
+  describe('notification sound setting (§3.2, §2.14)', () => {
+    it('is checked by default, always available (no Web Push gate), and persists the choice', async () => {
+      // Web Push is unsupported by default here: the sound toggle must still
+      // work — it is an in-app preference, not a Web Push one.
+      r = render(createElement(SettingsModal, { open: true, onClose: () => undefined }), {
+        seed,
+        theme: true,
+        notify: true,
+      })
+      const box = labeledInput(r.body, 'Notification sound')
+      expect(box.disabled).toBe(false)
+      expect(box.checked).toBe(true)
+      // Unset by default: the sound plays (the long-standing behavior).
+      expect(localStorage.getItem('easymoney.notifySound')).toBeNull()
+      click(box)
+      await flush()
+      expect(box.checked).toBe(false)
+      expect(localStorage.getItem('easymoney.notifySound')).toBe('off')
+      click(box)
+      await flush()
+      expect(box.checked).toBe(true)
+      expect(localStorage.getItem('easymoney.notifySound')).toBe('on')
     })
   })
 })

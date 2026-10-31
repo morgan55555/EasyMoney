@@ -3,7 +3,7 @@
  * on/off switches, persisted in localStorage, default off. Mirror the theme
  * manager: they are never sent to the server and never part of the API.
  *
- * Two preferences:
+ * Three preferences:
  *   - `enabled` (`easymoney.browserNotify`): whether Web Push is active in
  *     this browser. Raising the actual OS notification is done by the Web
  *     Push service worker (src/sw/sw.ts, driven by the Settings toggle
@@ -15,9 +15,15 @@
  *     shared Cache Storage record (lib/pushPrefs) on every app load and on
  *     every change; the worker reads that record at push time, so the choice
  *     applies from the very next push — no reload or re-subscribe needed.
+ *   - `soundOn` (`easymoney.notifySound`): whether the in-app notification
+ *     sound plays on `notification.created` (default on, §2.14/§3.2). The
+ *     sound path (lib/sound) reads localStorage directly on every play and
+ *     keeps no state, so no mirror is needed — this provider only owns the
+ *     Settings-modal state and the cross-tab `storage` sync.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { SOUND_STORAGE_KEY } from './sound'
 import { writeWhileVisiblePref } from './pushPrefs'
 
 const STORAGE_KEY = 'easymoney.browserNotify'
@@ -56,6 +62,24 @@ function persistWhileVisible(on: boolean): void {
   }
 }
 
+function readSoundOn(): boolean {
+  try {
+    // Default ON (the sound is the long-standing behavior); only an explicit
+    // 'off' silences it — the inverse polarity of the two push preferences.
+    return localStorage.getItem(SOUND_STORAGE_KEY) !== 'off'
+  } catch {
+    return true
+  }
+}
+
+function persistSoundOn(on: boolean): void {
+  try {
+    localStorage.setItem(SOUND_STORAGE_KEY, on ? 'on' : 'off')
+  } catch {
+    // Ignore storage failures; the in-memory choice still applies this session.
+  }
+}
+
 interface BrowserNotifyContextValue {
   /** The persisted preference (default off). */
   enabled: boolean
@@ -63,6 +87,9 @@ interface BrowserNotifyContextValue {
   /** Whether OS notifications may show while an app tab is visible (default off). */
   whileVisible: boolean
   setWhileVisible: (next: boolean) => void
+  /** Whether the in-app notification sound plays (default on). */
+  soundOn: boolean
+  setSoundOn: (next: boolean) => void
 }
 
 const BrowserNotifyContext = createContext<BrowserNotifyContextValue>({
@@ -70,11 +97,14 @@ const BrowserNotifyContext = createContext<BrowserNotifyContextValue>({
   setEnabled: () => undefined,
   whileVisible: false,
   setWhileVisible: () => undefined,
+  soundOn: true,
+  setSoundOn: () => undefined,
 })
 
 export function BrowserNotifyProvider({ children }: { children: ReactNode }) {
   const [enabled, setEnabledState] = useState<boolean>(() => readStored())
   const [whileVisible, setWhileVisibleState] = useState<boolean>(() => readWhileVisible())
+  const [soundOn, setSoundOnState] = useState<boolean>(() => readSoundOn())
 
   const setEnabled = useCallback((next: boolean) => {
     setEnabledState(next)
@@ -88,7 +118,13 @@ export function BrowserNotifyProvider({ children }: { children: ReactNode }) {
     void writeWhileVisiblePref(next)
   }, [])
 
-  // Cross-tab sync (AGENTS.md §2.14, req 7): both preferences live in
+  const setSoundOn = useCallback((next: boolean) => {
+    setSoundOnState(next)
+    persistSoundOn(next)
+    // No mirror: lib/sound reads localStorage directly on every play.
+  }, [])
+
+  // Cross-tab sync (AGENTS.md §2.14, req 7): all three preferences live in
   // localStorage and every tab of the browser must apply the same display
   // condition. The `storage` event fires only in the *other* tabs when one
   // writes, so this keeps this tab's in-memory state in lockstep — without
@@ -101,9 +137,10 @@ export function BrowserNotifyProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void writeWhileVisiblePref(readWhileVisible())
     const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY || e.key === WHILE_VISIBLE_KEY) {
+      if (e.key === STORAGE_KEY || e.key === WHILE_VISIBLE_KEY || e.key === SOUND_STORAGE_KEY) {
         setEnabledState(readStored())
         setWhileVisibleState(readWhileVisible())
+        setSoundOnState(readSoundOn())
       }
     }
     window.addEventListener('storage', onStorage)
@@ -111,8 +148,8 @@ export function BrowserNotifyProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<BrowserNotifyContextValue>(
-    () => ({ enabled, setEnabled, whileVisible, setWhileVisible }),
-    [enabled, setEnabled, whileVisible, setWhileVisible],
+    () => ({ enabled, setEnabled, whileVisible, setWhileVisible, soundOn, setSoundOn }),
+    [enabled, setEnabled, whileVisible, setWhileVisible, soundOn, setSoundOn],
   )
 
   return <BrowserNotifyContext.Provider value={value}>{children}</BrowserNotifyContext.Provider>

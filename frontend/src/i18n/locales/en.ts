@@ -404,6 +404,8 @@ export const en: Dict = {
   'settings.notifyWhileVisible': 'Also notify while the app is visible',
   'settings.notifyWhileVisibleHint':
     'Show OS notifications even when a tab of the app is open in the foreground.',
+  'settings.notifySound': 'Notification sound',
+  'settings.notifySoundHint': 'Play a short sound when a new notification arrives.',
 
   // --- Verify email gate --------------------------------------------------------------------
   'verify.title': 'Confirm your email',

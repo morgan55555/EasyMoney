@@ -2,8 +2,9 @@
  * Settings modal (AGENTS.md §2.13, §2.14, §3.6): change display name, avatar
  * (upload / clear), email (with the confirm-to-old-address flow), password
  * (with the confirmation-link flow), preferred language (the only place it
- * is changed server-side), the UI theme and the browser-notifications
- * preference (both client-only, never sent to the server).
+ * is changed server-side), the UI theme, the browser-notifications
+ * preferences and the notification sound (all client-only, never sent to
+ * the server).
  *
  * Name / language save through PATCH /me; email through POST /me/email/change
  * and password through POST /me/password/change (each returns "changed" or
@@ -154,6 +155,8 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
     setEnabled: setNotifyEnabled,
     whileVisible,
     setWhileVisible,
+    soundOn,
+    setSoundOn,
   } = useBrowserNotify()
   const [notifyChecked, setNotifyChecked] = useState(notifyEnabled)
   const [notifyBusy, setNotifyBusy] = useState(false)
@@ -388,6 +391,17 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
               </span>
             </label>
             <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.notifyWhileVisibleHint')}</p>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={soundOn}
+                onChange={(e) => setSoundOn(e.target.checked)}
+                aria-label={t('settings.notifySound')}
+                className="h-4 w-4 rounded border-gray-300 accent-indigo-600 focus:ring-indigo-500 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800"
+              />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('settings.notifySound')}</span>
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.notifySoundHint')}</p>
           </div>
         </section>
 
