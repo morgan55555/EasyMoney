@@ -60,6 +60,8 @@ function makeDescribe(t: TFunc, locale: string) {
         return t('feed.groupClosed', { actor: actorName })
       case 'group.reopened':
         return t('feed.groupReopened', { actor: actorName })
+      case 'group.owner_changed':
+        return t('feed.ownerChanged', { actor: actorName, name: str(p.new_owner_name) })
       case 'group.created':
         return t('feed.groupCreated', { actor: actorName, name: str(p.name) })
       default:
@@ -79,6 +81,7 @@ const FOCUSABLE_FEED_TYPES = new Set([
   'member.left',
   'group.closed',
   'group.reopened',
+  'group.owner_changed',
 ])
 
 export function FeedPanel({ groupId, focusType = null }: { groupId: number; focusType?: string | null }) {

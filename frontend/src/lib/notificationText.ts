@@ -62,6 +62,8 @@ export function makeDescribe(t: TFunc, locale: string) {
         return t('notif.groupClosed')
       case 'group.reopened':
         return t('notif.groupReopened')
+      case 'group.owner_changed':
+        return t('notif.ownerChanged', { name: String(p.new_owner_name ?? '') })
       default:
         return type.replace(/_/g, ' ')
     }
@@ -111,6 +113,8 @@ export function notificationTarget(n: NotificationOut): { group_id: number; tab:
       return { group_id: gid, tab: 'activity', focus: 'feed:group.closed' }
     case 'group.reopened':
       return { group_id: gid, tab: 'activity', focus: 'feed:group.reopened' }
+    case 'group.owner_changed':
+      return { group_id: gid, tab: 'activity', focus: 'feed:group.owner_changed' }
     default:
       return null
   }

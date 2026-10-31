@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from app.core.config import get_settings
 from app.models.attachment import Attachment
 from app.models.expense import Expense
 from app.models.group import Group
@@ -16,6 +17,7 @@ from app.services import currency as currency_service
 
 
 def build_group_out(group: Group, member_count: int, balance: Decimal) -> GroupOut:
+    settings = get_settings()
     return GroupOut(
         id=group.id,
         name=group.name,
@@ -25,6 +27,11 @@ def build_group_out(group: Group, member_count: int, balance: Decimal) -> GroupO
         closed_at=group.closed_at,
         member_count=member_count,
         balance=currency_service.format_money(balance, group.currency),
+        debt_overdue_days=group.debt_overdue_days,
+        reminder_interval_days=group.reminder_interval_days,
+        debt_overdue_days_default=settings.debt_overdue_days_default,
+        reminder_interval_days_default=settings.reminder_interval_days_default,
+        reminder_interval_days_min=settings.reminder_interval_days_min,
     )
 
 

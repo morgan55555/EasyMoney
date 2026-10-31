@@ -86,7 +86,7 @@ export const en: Dict = {
   'group.reopenError': 'Could not reopen the group',
   'group.closedBanner':
     'This group is closed: no new expenses can be added. Settlements, invites and reads still work.',
-  'group.closedBannerOwner': 'You can reopen it from the button above.',
+  'group.closedBannerOwner': 'You can reopen it from the Settings tab.',
   'group.closedBannerOther': 'Only the owner can reopen it.',
   'group.closeModalTitle': 'Close group',
   'group.closeModalQ': 'Close {{name}}?',
@@ -96,6 +96,22 @@ export const en: Dict = {
   'group.reopenModalQ': 'Reopen {{name}}?',
   'group.reopenModalBody': 'New expenses can be added again.',
 
+  // --- Group settings (owner only, §2.7) ---------------------------------------------
+  'settings.nameLabel': 'Group name',
+  'settings.rename': 'Rename',
+  'settings.remindersTitle': 'Debt reminders',
+  'settings.overdueLabel': 'Days before a debt is overdue',
+  'settings.overdueHint': 'Empty = the app default ({{days}} days).',
+  'settings.intervalLabel': 'Days between repeat reminders',
+  'settings.intervalHint': 'Empty = the app default ({{days}} days); at least {{min}}.',
+  'settings.ownerTitle': 'Owner',
+  'settings.ownerSelect': 'Select a new owner…',
+  'settings.ownerHint': 'The new owner gets the owner-only controls (settings, rename, close). You stay in the group as a member.',
+  'settings.transfer': 'Transfer ownership',
+  'settings.transferModalTitle': 'Transfer ownership?',
+  'settings.transferModalBody': '{{name}} becomes the owner of this group. You stay in the group as a regular member.',
+  'settings.lifespanTitle': 'Group',
+
   // --- Group tabs --------------------------------------------------------------------
   'tab.expenses': 'Expenses',
   'tab.balances': 'Balances',
@@ -103,6 +119,7 @@ export const en: Dict = {
   'tab.activity': 'Activity',
   'tab.invites': 'Invites',
   'tab.people': 'People',
+  'tab.settings': 'Settings',
 
   // --- Overview -------------------------------------------------------------------------
   'overview.title': 'Overview',
@@ -278,6 +295,7 @@ export const en: Dict = {
   'feed.memberLeft': '{{actor}} left the group',
   'feed.groupClosed': '{{actor}} closed the group',
   'feed.groupReopened': '{{actor}} reopened the group',
+  'feed.ownerChanged': '{{actor}} transferred ownership to {{name}}',
   'feed.groupCreated': '{{actor}} created the group “{{name}}”',
 
   // --- Notifications bell ---------------------------------------------------------------------------------------
@@ -303,6 +321,7 @@ export const en: Dict = {
   'notif.view': 'View',
   'notif.groupClosed': 'The group was closed',
   'notif.groupReopened': 'The group was reopened',
+  'notif.ownerChanged': '{{name}} is now the group owner',
   'notif.appTitle': 'EasyMoney',
 
   // --- Receipts -----------------------------------------------------------------------------------------------------------------

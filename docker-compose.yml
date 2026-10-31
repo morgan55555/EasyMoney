@@ -69,8 +69,10 @@ services:
       # Max raw size (MB) of a user avatar upload.
       MAX_AVATAR_MB: ${MAX_AVATAR_MB:-2}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8081}
-      DEBT_OVERDUE_DAYS: ${DEBT_OVERDUE_DAYS:-7}
-      REMINDER_INTERVAL_DAYS: ${REMINDER_INTERVAL_DAYS:-7}
+      # App-wide reminder defaults (per-group overrides live in the Settings tab).
+      DEBT_OVERDUE_DAYS_DEFAULT: ${DEBT_OVERDUE_DAYS_DEFAULT:-7}
+      REMINDER_INTERVAL_DAYS_DEFAULT: ${REMINDER_INTERVAL_DAYS_DEFAULT:-7}
+      REMINDER_INTERVAL_DAYS_MIN: ${REMINDER_INTERVAL_DAYS_MIN:-7}
       INVITE_EXPIRY_DAYS: ${INVITE_EXPIRY_DAYS:-7}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
       # Receipt objects live in an S3-compatible store (LocalStack here; AWS

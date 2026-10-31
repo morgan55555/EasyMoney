@@ -14,9 +14,15 @@ two day thresholds, so the tests can drive a fake clock and a fake mailer
 * the *debt age* is the date of the first owed expense not fully covered
   (None when everything is covered);
 * the debtor is *overdue* iff their balance is negative and
-  ``now − debt_age > DEBT_OVERDUE_DAYS`` (strictly greater);
-* at most one reminder per ``REMINDER_INTERVAL_DAYS`` (skipped only when
-  less than that has passed, so a send exactly at the boundary is allowed);
+  ``now − debt_age > overdue_days`` (strictly greater), where
+  ``overdue_days`` is the group's own ``debt_overdue_days`` when set, else
+  the app-wide default (``DEBT_OVERDUE_DAYS_DEFAULT``);
+* at most one reminder per ``interval_days`` (skipped only when less than
+  that has passed, so a send exactly at the boundary is allowed), where
+  ``interval_days`` is the group's own ``reminder_interval_days`` when set,
+  else the app-wide default (``REMINDER_INTERVAL_DAYS_DEFAULT``) — and the
+  effective interval is always clamped up to the env floor
+  ``REMINDER_INTERVAL_DAYS_MIN``;
 * closed groups are reminded too, until the debt is settled (§2.7).
 
 The scan is two-phase: phase 1 collects the candidates; phase 2 re-verifies
@@ -124,21 +130,48 @@ async def _debt_age(db: AsyncSession, group_id: int, user_id: int) -> date | Non
     return debt_age(owed, coverage)
 
 
+def effective_thresholds(
+    group: Group,
+    overdue_days: int,
+    interval_days: int,
+    interval_days_min: int,
+) -> tuple[int, int]:
+    """The ``(overdue, interval)`` day thresholds that apply to one group.
+
+    A per-group setting (``Group.debt_overdue_days`` /
+    ``Group.reminder_interval_days``) wins when it is set; otherwise the
+    app-wide default applies. The effective interval is clamped *up* to
+    ``interval_days_min`` — the env floor (``REMINDER_INTERVAL_DAYS_MIN``) —
+    so a stored value below it (e.g. set before the floor was raised) can
+    never shorten the cadence.
+    """
+    overdue = group.debt_overdue_days if group.debt_overdue_days is not None else overdue_days
+    interval = (
+        group.reminder_interval_days if group.reminder_interval_days is not None else interval_days
+    )
+    return overdue, max(interval, interval_days_min)
+
+
 async def find_candidates(
     db: AsyncSession,
     now: datetime,
     *,
     overdue_days: int,
     interval_days: int,
+    interval_days_min: int,
 ) -> list[tuple[Group, User]]:
     """Phase 1 (§2.7 steps 1–2): overdue current members, interval-gated.
 
     All groups are scanned — closed ones too, until settled. Only current
-    members (Membership rows) are reminded.
+    members (Membership rows) are reminded. Each group's own thresholds
+    (per-group settings with the env defaults as fallback) apply to it.
     """
     groups = (await db.execute(select(Group).order_by(Group.id))).scalars().all()
     candidates: list[tuple[Group, User]] = []
     for group in groups:
+        overdue, interval = effective_thresholds(
+            group, overdue_days, interval_days, interval_days_min
+        )
         members = (
             (
                 await db.execute(
@@ -165,10 +198,10 @@ async def find_candidates(
             if balance >= 0:
                 continue
             age_date = await _debt_age(db, group.id, user.id)
-            if age_date is None or (now - _day_start(age_date)) <= timedelta(days=overdue_days):
+            if age_date is None or (now - _day_start(age_date)) <= timedelta(days=overdue):
                 continue
             last = last_sent.get(user.id)
-            if last is not None and (now - last) < timedelta(days=interval_days):
+            if last is not None and (now - last) < timedelta(days=interval):
                 continue
             candidates.append((group, user))
     return candidates
@@ -216,40 +249,52 @@ async def run_reminder_scan(
     *,
     overdue_days: int | None = None,
     interval_days: int | None = None,
+    interval_days_min: int | None = None,
     send: SendFn | None = None,
 ) -> int:
     """Run one full reminder pass; returns the number of emails sent.
 
-    ``now`` (default: UTC now), the two day thresholds (default: settings)
-    and ``send`` (default: the real reminder mail) are injectable for the
-    fake-clock / fake-mailer tests (AGENTS.md §5).
+    ``now`` (default: UTC now), the app-wide default day thresholds (default:
+    settings) and ``send`` (default: the real reminder mail) are injectable
+    for the fake-clock / fake-mailer tests (AGENTS.md §5). A group's own
+    settings (``debt_overdue_days`` / ``reminder_interval_days``) override
+    the defaults for that group, and the effective interval is always clamped
+    to at least ``interval_days_min`` (default: settings).
     """
     settings = get_settings()
     if now is None:
         now = datetime.now(UTC)
     if overdue_days is None:
-        overdue_days = settings.debt_overdue_days
+        overdue_days = settings.debt_overdue_days_default
     if interval_days is None:
-        interval_days = settings.reminder_interval_days
+        interval_days = settings.reminder_interval_days_default
+    if interval_days_min is None:
+        interval_days_min = settings.reminder_interval_days_min
     if send is None:
         send = _send_reminder
 
     async with factory() as db:
         candidates = await find_candidates(
-            db, now, overdue_days=overdue_days, interval_days=interval_days
+            db,
+            now,
+            overdue_days=overdue_days,
+            interval_days=interval_days,
+            interval_days_min=interval_days_min,
         )
 
     sent = 0
     for group, debtor in candidates:
         # Phase 2 (§2.7 step 3): re-verify at send time in a fresh session —
         # a settlement that landed between the scan and the send kills the
-        # reminder; never remind about a settled debt.
+        # reminder; never remind about a settled debt. The group's own
+        # overdue threshold applies (it may have changed since phase 1).
+        overdue, _ = effective_thresholds(group, overdue_days, interval_days, interval_days_min)
         async with factory() as db:
             balance = await balances_service.group_balance_for_user(db, group.id, debtor.id)
             if balance >= 0:
                 continue
             age_date = await _debt_age(db, group.id, debtor.id)
-            if age_date is None or (now - _day_start(age_date)) <= timedelta(days=overdue_days):
+            if age_date is None or (now - _day_start(age_date)) <= timedelta(days=overdue):
                 continue
             snapshot = await balances_service.group_balance_snapshot(db, group)
         try:

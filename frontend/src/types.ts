@@ -146,6 +146,19 @@ export interface GroupOut {
   member_count: number
   /** The caller's balance in this group, pre-formatted (string). */
   balance: string
+  /** Per-group reminder settings (AGENTS.md §2.7); `null` = the app-wide default. */
+  debt_overdue_days: number | null
+  reminder_interval_days: number | null
+  /** The app-wide defaults/floor, echoed so the UI can show "— (default)". */
+  debt_overdue_days_default: number
+  reminder_interval_days_default: number
+  reminder_interval_days_min: number
+}
+
+/** Owner-only group settings (AGENTS.md §2.7); `null` clears an override. */
+export interface GroupSettingsBody {
+  debt_overdue_days: number | null
+  reminder_interval_days: number | null
 }
 
 export interface MemberOut {

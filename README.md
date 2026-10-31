@@ -142,8 +142,9 @@ Copy the values from the table below into `.env` (a `.env.example` will ship wit
 | `REGISTRATION_OPEN` | `true` | When `false`, only the first user can register (while the users table is empty); after that registration is closed (403) and the register form is hidden |
 | `MAX_AVATAR_MB` | `2` | Max raw size of a user avatar upload (stored as base64 in the DB) |
 | `FRONTEND_URL` | `http://localhost:8081` | Used to build invite links in emails |
-| `DEBT_OVERDUE_DAYS` | `7` | Debt older than this is "overdue" (reminders) |
-| `REMINDER_INTERVAL_DAYS` | `7` | Minimum days between two reminder emails (same member, same group) |
+| `DEBT_OVERDUE_DAYS_DEFAULT` | `7` | App-wide default: a debt older than this is "overdue" (reminders). Each group may override it from its Settings tab (owner) |
+| `REMINDER_INTERVAL_DAYS_DEFAULT` | `7` | App-wide default: minimum days between two reminder emails (same member, same group). Each group may override it (never below the floor below) |
+| `REMINDER_INTERVAL_DAYS_MIN` | `7` | Hard floor for the per-group reminder interval: a group's interval can be set no lower than this (422 otherwise); the scan clamps stored values up to it |
 | `INVITE_EXPIRY_DAYS` | `7` | Lifetime of an invitation |
 | `MAX_UPLOAD_MB` | `10` | Receipt file size limit |
 | `CORS_ORIGINS` | `http://localhost:8081` | Allowed origins (only relevant if frontend not behind the same nginx) |
@@ -305,7 +306,7 @@ The authoritative, detailed versions live in [AGENTS.md](AGENTS.md) — implemen
 - **Balances are computed on read** (SQL aggregate over expenses + confirmed settlements), never cached in a mutable column. This makes the edit/delete-recalculation requirement, concurrent additions, and the "sum of all balances = 0" invariant automatic.
 - **Settlement lifecycle:** `pending → confirmed | rejected | cancelled`. Only `confirmed` moves money in the balances. A proposed amount is validated against the current pairwise debt at proposal time; if the debt shrinks before confirmation, the confirmed payment is still applied (it may create a reverse debt — that's correct accounting, the payment really happened).
 - **Optimal settlement suggestion:** greedy matching of largest debtor with largest creditor, at most `n−1` transfers; total transferred always equals total debt.
-- **Overdue reminders:** FIFO attribution of settlements to owed expenses (oldest first). A debtor is overdue when their oldest still-unpaid owed expense is older than `DEBT_OVERDUE_DAYS`. One email per member per group per `REMINDER_INTERVAL_DAYS`, re-verified at send time; applies to closed groups until settled.
+- **Overdue reminders:** FIFO attribution of settlements to owed expenses (oldest first). A debtor is overdue when their oldest still-unpaid owed expense is older than the group's overdue threshold (per-group override, else `DEBT_OVERDUE_DAYS_DEFAULT`). One email per member per group per the group's reminder interval (per-group override, else `REMINDER_INTERVAL_DAYS_DEFAULT`, never below `REMINDER_INTERVAL_DAYS_MIN`), re-verified at send time; applies to closed groups until settled. Both thresholds are set per group by the owner (group → Settings).
 - **Closing:** blocks new expenses (other writes still work), emails the final summary to all members; reopening lifts the block.
 
 ---

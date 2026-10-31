@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import BaseModel
@@ -33,6 +33,11 @@ class Group(BaseModel):
     # "active" | "closed"
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Per-group reminder settings (AGENTS.md §2.7). Null = use the app-wide
+    # default (``DEBT_OVERDUE_DAYS_DEFAULT`` / ``REMINDER_INTERVAL_DAYS_DEFAULT``);
+    # the effective interval is clamped to ``REMINDER_INTERVAL_DAYS_MIN``.
+    debt_overdue_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reminder_interval_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # --- relationships ---
     creator: Mapped[User] = relationship(back_populates="created_groups")

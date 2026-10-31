@@ -22,6 +22,7 @@ import type {
   ExpenseUpdateBody,
   GroupBalancesOut,
   GroupOut,
+  GroupSettingsBody,
   InviteOut,
   LoginRequest,
   MePatchBody,
@@ -92,6 +93,12 @@ export const groupsApi = {
     apiFetch<GroupOut>(`/api/groups/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
   close: (id: number) => apiFetch<GroupOut>(`/api/groups/${id}/close`, { method: 'POST' }),
   reopen: (id: number) => apiFetch<GroupOut>(`/api/groups/${id}/reopen`, { method: 'POST' }),
+  /** Owner-only (AGENTS.md §2.7). `null` clears an override back to the default. */
+  updateSettings: (id: number, body: GroupSettingsBody) =>
+    apiFetch<GroupOut>(`/api/groups/${id}/settings`, { method: 'PATCH', body: JSON.stringify(body) }),
+  /** Owner-only (AGENTS.md §2.9): transfer `created_by` to another current member. */
+  transferOwner: (id: number, userId: number) =>
+    apiFetch<GroupOut>(`/api/groups/${id}/transfer-owner`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
   members: (id: number) => apiFetch<MemberOut[]>(`/api/groups/${id}/members`),
   removeMember: (id: number, userId: number) =>
     apiFetch<void>(`/api/groups/${id}/members/${userId}`, { method: 'DELETE' }),

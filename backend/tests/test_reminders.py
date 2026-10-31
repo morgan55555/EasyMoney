@@ -9,8 +9,9 @@ mailer** (an injected ``send`` that builds the real email via
 Covered:
   * FIFO attribution: partial coverage keeps the oldest date, exact coverage
     of a portion advances to the next, full coverage yields ``None``;
-  * the overdue boundary is *strictly* greater than ``DEBT_OVERDUE_DAYS`` —
-    exactly N days is not overdue, N days + 1 minute is;
+  * the overdue boundary is *strictly* greater than the overdue threshold
+    (the app-wide default ``DEBT_OVERDUE_DAYS_DEFAULT`` when the group has no
+    override) — exactly N days is not overdue, N days + 1 minute is;
   * the weekly cap: sent at T0, skipped at T0 + 6d23h, allowed at exactly
     T0 + 7d;
   * skip-when-settled: a confirmed settlement that zeroes the balance kills
@@ -20,7 +21,12 @@ Covered:
   * closed groups are still reminded until the debt is settled;
   * close/reopen: owner-only (403), idempotency (409), feed rows, the bell to
     every member, and the final summary mail (unpaid variant lists who owes
-    whom; the settled variant says "settled up").
+    whom; the settled variant says "settled up");
+  * per-group settings (§2.7): a group's own ``debt_overdue_days`` makes the
+    same debt age overdue sooner than the app-wide default; its own
+    ``reminder_interval_days`` (when set above the ``REMINDER_INTERVAL_DAYS_MIN``
+    floor) lengthens the re-reminder cadence past the default; and an interval
+    stored below the floor is clamped *up* to it at scan time.
 """
 
 from __future__ import annotations
@@ -494,6 +500,84 @@ async def _close_summary_includes_zero_balances(factory: async_sessionmaker) -> 
         assert "  - User 3: 0.00 EUR" in (text or "")
 
 
+# --- per-group reminder settings (AGENTS.md §2.7) ----------------------------
+
+
+async def _per_group_overdue_override(factory: async_sessionmaker) -> None:
+    await _mk_users(factory, (ALICE, BOB))
+    await _mk_group(factory, GROUP_ID, "EUR", ALICE, (ALICE, BOB))
+    await _mk_expense(
+        factory, GROUP_ID, ALICE, Decimal("100.00"), dt.date(2026, 10, 20), {BOB: Decimal("100.00")}
+    )
+    # 3 days after the expense: not overdue under the 7-day default
+    send0, emails0 = _recorder()
+    assert await _scan(factory, dt.datetime(2026, 10, 23, tzinfo=dt.UTC), send0) == 0
+    assert emails0 == []
+    # a 2-day per-group override makes the same 3-day age overdue (3 > 2)
+    async with factory() as db:
+        group = await db.get(Group, GROUP_ID)
+        assert group is not None
+        group.debt_overdue_days = 2
+        await db.commit()
+    send, emails = _recorder()
+    assert await _scan(factory, dt.datetime(2026, 10, 23, tzinfo=dt.UTC), send) == 1
+    assert len(emails) == 1
+
+
+async def _per_group_interval(factory: async_sessionmaker) -> None:
+    await _mk_users(factory, (ALICE, BOB))
+    await _mk_group(factory, GROUP_ID, "EUR", ALICE, (ALICE, BOB))
+    await _mk_expense(
+        factory, GROUP_ID, ALICE, Decimal("100.00"), dt.date(2026, 10, 1), {BOB: Decimal("100.00")}
+    )
+    async with factory() as db:
+        group = await db.get(Group, GROUP_ID)
+        assert group is not None
+        # a 10-day cadence, longer than the 7-day default (and above the floor)
+        group.reminder_interval_days = 10
+        await db.commit()
+    t0 = dt.datetime(2026, 10, 10, tzinfo=dt.UTC)
+    send, _ = _recorder()
+    assert await _scan(factory, t0, send) == 1
+    # at t0 + 7d the 7-day default would allow a re-reminder (see the weekly-cap
+    # test), but the group's 10-day interval holds it back
+    send1, emails1 = _recorder()
+    assert await _scan(factory, t0 + dt.timedelta(days=7), send1) == 0
+    assert emails1 == []
+    # at t0 + 10d the group's own boundary is reached -> allowed
+    send2, emails2 = _recorder()
+    assert await _scan(factory, t0 + dt.timedelta(days=10), send2) == 1
+    assert len(emails2) == 1
+
+
+async def _interval_below_min_is_clamped(factory: async_sessionmaker) -> None:
+    await _mk_users(factory, (ALICE, BOB))
+    await _mk_group(factory, GROUP_ID, "EUR", ALICE, (ALICE, BOB))
+    await _mk_expense(
+        factory, GROUP_ID, ALICE, Decimal("100.00"), dt.date(2026, 10, 1), {BOB: Decimal("100.00")}
+    )
+    async with factory() as db:
+        group = await db.get(Group, GROUP_ID)
+        assert group is not None
+        group.reminder_interval_days = 1  # stored below the 7-day floor
+        await db.commit()
+    t0 = dt.datetime(2026, 10, 10, tzinfo=dt.UTC)
+    send, _ = _recorder()
+    # the floor is applied at scan time: max(1, 7) == 7 days
+    assert (
+        await reminders_service.run_reminder_scan(factory, now=t0, interval_days_min=7, send=send)
+        == 1
+    )
+    send2, emails2 = _recorder()
+    assert (
+        await reminders_service.run_reminder_scan(
+            factory, now=t0 + dt.timedelta(days=3), interval_days_min=7, send=send2
+        )
+        == 0
+    )
+    assert emails2 == []
+
+
 # --- entry points ------------------------------------------------------------
 
 
@@ -523,3 +607,15 @@ def test_close_reopen_lifecycle(run_db) -> None:
 
 def test_close_summary_includes_zero_balances(run_db) -> None:
     run_db(_close_summary_includes_zero_balances)
+
+
+def test_per_group_overdue_override(run_db) -> None:
+    run_db(_per_group_overdue_override)
+
+
+def test_per_group_interval(run_db) -> None:
+    run_db(_per_group_interval)
+
+
+def test_interval_below_min_is_clamped(run_db) -> None:
+    run_db(_interval_below_min_is_clamped)

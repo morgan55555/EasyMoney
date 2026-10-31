@@ -33,6 +33,7 @@ import type {
   ExpenseUpdateBody,
   GroupBalancesOut,
   GroupOut,
+  GroupSettingsBody,
   InviteOut,
   MePatchBody,
   MemberOut,
@@ -333,6 +334,28 @@ export function useReopenGroup(groupId: number) {
     onSuccess: () => {
       invalidateGroup(groupId)
       void qc.invalidateQueries({ queryKey: keys.overview })
+    },
+  })
+}
+
+export function useUpdateGroupSettings(groupId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: GroupSettingsBody) => api.groupsApi.updateSettings(groupId, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.group(groupId) })
+      void qc.invalidateQueries({ queryKey: keys.groups })
+    },
+  })
+}
+
+export function useTransferOwner(groupId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (userId: number) => api.groupsApi.transferOwner(groupId, userId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.group(groupId) })
+      void qc.invalidateQueries({ queryKey: keys.groups })
     },
   })
 }

@@ -1,5 +1,5 @@
-"""Group lifecycle: create, list, rename, membership, close/reopen
-(AGENTS.md §2.9–2.10).
+"""Group lifecycle: create, list, rename, membership, settings, owner
+transfer, close/reopen (AGENTS.md §2.7, §2.9–2.10).
 
 Membership checks (is the caller a member / the owner) are enforced by the
 API dependencies (``get_group_member`` / ``get_group_owner``); this service
@@ -15,6 +15,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.errors import Conflict, Forbidden, ValidationFailed
 from app.models.group import Group
 from app.models.membership import Membership
@@ -104,10 +105,42 @@ async def group_with_count(db: AsyncSession, group: Group, user: User) -> tuple[
 
 
 async def rename_group(db: AsyncSession, group: Group, user: User, name: str) -> Group:
+    if user.id != group.created_by:
+        raise Forbidden("Only the group owner can rename the group")
     clean = name.strip()
     if not clean:
         raise ValidationFailed("Group name must not be empty")
     group.name = clean[:120]
+    await db.commit()
+    await db.refresh(group)
+    return group
+
+
+async def update_settings(
+    db: AsyncSession,
+    group: Group,
+    user: User,
+    debt_overdue_days: int | None,
+    reminder_interval_days: int | None,
+) -> Group:
+    """Owner-only. Updates the group's reminder settings (AGENTS.md §2.7).
+
+    ``None`` clears the override — the app-wide default applies again. The
+    interval can never be set below the env floor
+    (``REMINDER_INTERVAL_DAYS_MIN``): 422 otherwise.
+    """
+    if user.id != group.created_by:
+        raise Forbidden("Only the group owner can change the group settings")
+    settings = get_settings()
+    if (
+        reminder_interval_days is not None
+        and reminder_interval_days < settings.reminder_interval_days_min
+    ):
+        raise ValidationFailed(
+            f"The reminder interval cannot be less than {settings.reminder_interval_days_min} days"
+        )
+    group.debt_overdue_days = debt_overdue_days
+    group.reminder_interval_days = reminder_interval_days
     await db.commit()
     await db.refresh(group)
     return group
@@ -329,3 +362,56 @@ async def remove_member(db: AsyncSession, group: Group, actor: User, user_id: in
     await ws_hook.unsubscribe_user(user_id, group.id)
     await ws_hook.emit_group(db, group, "member.left", payload)
     await ws_hook.emit_notifications(group.id, notifications)
+
+
+# --- Owner transfer ------------------------------------------------------------------
+
+
+async def transfer_owner(db: AsyncSession, group: Group, user: User, new_owner_id: int) -> Group:
+    """Owner-only. Transfers the group to another current member.
+
+    The transferor keeps their membership (they simply lose the owner-only
+    rights). Emits a feed row, the ``group.owner_changed`` WS event and a
+    bell notification to every member (including the transferor, whose own
+    tabs also need the new owner).
+    """
+    if user.id != group.created_by:
+        raise Forbidden("Only the group owner can transfer the group")
+    if new_owner_id == user.id:
+        raise Conflict("You are already the owner of this group")
+    membership = await db.scalar(
+        select(Membership).where(
+            Membership.group_id == group.id, Membership.user_id == new_owner_id
+        )
+    )
+    if membership is None:
+        raise Conflict("That user is not a member of this group")
+    new_owner = await db.get(User, new_owner_id)
+    old_owner_id = group.created_by
+    group.created_by = new_owner_id
+    payload = {
+        "old_owner_id": old_owner_id,
+        "new_owner_id": new_owner_id,
+        "new_owner_name": new_owner.display_name if new_owner else f"user {new_owner_id}",
+        "group_id": group.id,
+        "group_name": group.name,
+    }
+    await feed_service.add_event(
+        db,
+        group.id,
+        "group.owner_changed",
+        actor_id=user.id,
+        ref_type="group",
+        ref_id=group.id,
+        payload=payload,
+    )
+    # §2.6: every member is notified of the ownership change.
+    member_ids = await list_member_ids(db, group.id)
+    notifications = await notifications_service.notify_users(
+        db, member_ids, "group.owner_changed", payload
+    )
+    await db.commit()
+    await db.refresh(group)
+    await ws_hook.emit_group(db, group, "group.owner_changed", payload)
+    await ws_hook.emit_notifications(group.id, notifications)
+    return group

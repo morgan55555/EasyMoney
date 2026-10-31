@@ -111,11 +111,18 @@ Definitions (all per group `G`, member `M`):
 - **Owed expense**: an active (non-deleted) expense `E` in `G` where `M` is a participant and `share(M, E) > paid(M, E)`. Its debt portion is `share − paid`.
 - **FIFO attribution**: confirmed settlements sent by `M` in `G` are applied to `M`'s owed expenses in ascending `(E.date, E.id)` order, covering the oldest first. (This is a bookkeeping attribution for aging only; it does not change balances, which are pure aggregates.)
 - `M`'s **debt age** = the date of the oldest owed expense of `M` in `G` that is not fully covered by FIFO attribution.
-- `M` is **overdue** in `G` ⇔ `balance(M, G) < 0` **and** `now − debt_age > DEBT_OVERDUE_DAYS` (default 7).
+- `M` is **overdue** in `G` ⇔ `balance(M, G) < 0` **and** `now − debt_age > the group's overdue threshold` — the per-group override `groups.debt_overdue_days` when set, else the app-wide default `DEBT_OVERDUE_DAYS_DEFAULT` (default 7).
+
+**Per-group thresholds.** Each group may override both thresholds (owner-only, `PATCH /groups/{id}/settings`, full state — both fields present, `null` clears an override back to the default):
+
+- `debt_overdue_days`: int `0–3650` or `null`.
+- `reminder_interval_days`: int `1–3650` or `null`, **422 when the given value is below `REMINDER_INTERVAL_DAYS_MIN`** (the env floor, default 7) — a group's interval can only be *longer* than the floor, never shorter.
+- `GroupOut` echoes the five settings fields (`debt_overdue_days`, `reminder_interval_days`, `debt_overdue_days_default`, `reminder_interval_days_default`, `reminder_interval_days_min`) so the UI can show "— (default)" and enforce the floor client-side.
+- **At scan time** the stored interval is clamped *up* to the floor (`max(stored, REMINDER_INTERVAL_DAYS_MIN)`), so a value that slipped past the API (or an env change after the fact) can never shorten the interval below the floor.
 
 Scheduler (APScheduler, hourly):
-1. Find all (M, G) overdue.
-2. Skip if `REMINDER_INTERVAL_DAYS` (default 7) have not passed since `last_reminder_sent_at(M, G)` (table `debt_reminder(group_id, debtor_id, last_sent_at)`, unique per pair).
+1. Find all (M, G) overdue (per-group thresholds as above).
+2. Skip if the group's effective interval (override or `REMINDER_INTERVAL_DAYS_DEFAULT`, clamped up to the floor) has not passed since `last_reminder_sent_at(M, G)` (table `debt_reminder(group_id, debtor_id, last_sent_at)`, unique per pair).
 3. **Re-verify at send time** (fresh transaction): if `balance(M, G) ≥ 0` or no longer overdue → skip. Never remind about a settled debt.
 4. Send one email to `M` listing, per creditor, the current pairwise amounts (from 2.3), the total, and the group name. Amounts are rendered with the currency code (`12.50 USD`) and the email links to the group page (`FRONTEND_URL/groups/{id}`). Mark `last_reminder_sent_at = now`.
 
@@ -133,6 +140,8 @@ Reminders apply to **closed groups too** until settled (the close summary is not
 - `POST /groups/{id}/close` — **owner only** (`group.created_by`). Sets `status = closed`, `closed_at`. Sends one **final summary email** per member, addressed to that member by name: per-member balance (**all members, zero-balance ones included** — it is a complete statement, not just the outstanding debts), who-owes-whom pairs, suggested transfers (2.3), or "everyone is settled up" if all zero. Amounts are rendered with the currency code (`12.50 USD`) and the email links to the group page (`FRONTEND_URL/groups/{id}`). Emits `group.closed`.
 - While closed: `POST /groups/{id}/expenses` and expense receipt upload → **409**. Everything else (settlements, invites, leaving, read endpoints) still works.
 - `POST /groups/{id}/reopen` — owner only. `status = active`, `closed_at = null`. Emits `group.reopened`. No email.
+- `POST /groups/{id}/transfer-owner` — **owner only**. The target must be a *current member* (409 otherwise); transferring to yourself is a 409. Updates `group.created_by`; the transferor **keeps their membership** (they simply lose the owner-only rights). Writes a feed row, emits the `group.owner_changed` WS event, and bells **all members including the transferor** (their own tabs also need the new owner). No email.
+- `PATCH /groups/{id}/settings` — **owner only**. The group's per-group reminder thresholds (§2.7). `PATCH /groups/{id}` (rename) is owner-only too; non-owners get 403.
 
 ### 2.10 Invitations
 
@@ -262,6 +271,7 @@ Rules:
 | `settlement.created` / `settlement.confirmed` / `settlement.rejected` / `settlement.cancelled` | full settlement |
 | `member.joined` / `member.left` | member user |
 | `group.closed` / `group.reopened` | group |
+| `group.owner_changed` | `{old_owner_id, new_owner_id, new_owner_name, group_id, group_name}` (§2.9) |
 | `notification.created` | the notification (bell count) |
 | `notification.read` | read-state change — no snapshot, no payload; the client refetches the bell (keeps the unread badge in sync across all tabs/windows of the same user, req 7) |
 
@@ -326,7 +336,7 @@ Rules:
 
 ## 4. Environment & running
 
-See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `SMTP_ENABLED`, `EMAIL_REGISTER_CONFIRMATION`, `EMAIL_CHANGE_CONFIRMATION`, `PASSWORD_CHANGE_CONFIRMATION`, `CONFIRMATION_TOKEN_HOURS`, `EMAIL_CHANGE_REVERT_DAYS`, `REGISTRATION_OPEN`, `MAX_AVATAR_MB`, `DEBUG`, `DEBT_OVERDUE_DAYS`, `REMINDER_INTERVAL_DAYS`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `STORAGE_BACKEND`, `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `UPLOAD_DIR` (only when `STORAGE_BACKEND=local`), `CORS_ORIGINS`, `REDIS_URL` (empty = local mode: in-process bus, no caches, lock no-op — the pre-Redis behaviour), `SNAPSHOT_CACHE_TTL_S`, `USER_GROUPS_CACHE_TTL_S`, `SCHEDULER_LOCK_TTL_S`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (empty keys = Web Push disabled, §2.14; generate via `backend/scripts/generate_vapid.py`).
+See README "Environment" table (single source). Key ones: `JWT_SECRET`, `DATABASE_URL`, `SMTP_*`, `SMTP_ENABLED`, `EMAIL_REGISTER_CONFIRMATION`, `EMAIL_CHANGE_CONFIRMATION`, `PASSWORD_CHANGE_CONFIRMATION`, `CONFIRMATION_TOKEN_HOURS`, `EMAIL_CHANGE_REVERT_DAYS`, `REGISTRATION_OPEN`, `MAX_AVATAR_MB`, `DEBUG`, `DEBT_OVERDUE_DAYS_DEFAULT`, `REMINDER_INTERVAL_DAYS_DEFAULT`, `REMINDER_INTERVAL_DAYS_MIN`, `INVITE_EXPIRY_DAYS`, `MAX_UPLOAD_MB`, `FRONTEND_URL`, `STORAGE_BACKEND`, `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `UPLOAD_DIR` (only when `STORAGE_BACKEND=local`), `CORS_ORIGINS`, `REDIS_URL` (empty = local mode: in-process bus, no caches, lock no-op — the pre-Redis behaviour), `SNAPSHOT_CACHE_TTL_S`, `USER_GROUPS_CACHE_TTL_S`, `SCHEDULER_LOCK_TTL_S`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (empty keys = Web Push disabled, §2.14; generate via `backend/scripts/generate_vapid.py`).
 
 Local dev without Docker (optional): `alembic upgrade head`, `uvicorn app.main:app --reload`, `npm run dev` (Vite proxies `/api`, `/ws` to `:8000`).
 
@@ -389,6 +399,8 @@ A change is done when:
 | 33 | Password change with optional email confirmation (pending hash rides on the token, applied only on confirm) | §2.13 (`PASSWORD_CHANGE_CONFIRMATION`, `email_tokens.password_hash`, `POST /me/password/change`) |
 | 34 | Multi-replica backend behind a load balancer: cross-instance WS fan-out, short-TTL display caches, single-flight reminder scan — Redis is optional, local mode when unset | §2.7 (lock), §3.2 (bus + caches), §4 (`REDIS_URL` + TTLs), `app/ws/bus.py`, `app/ws/user_groups.py`, `app/core/redis_client.py`, `app/workers/lock.py` |
 | 35 | Browser (Web) notifications via **Web Push** (service worker + VAPID): works with the app closed; suppressed while any app tab is visible; client-only toggle; permission only on the Settings gesture; click deep-links; the in-app bell + sound run in parallel, unchanged | §2.14, `app/services/push.py`, `app/api/push.py`, `app/models/push_subscription.py`, `app/ws/hook.py`, `frontend/src/sw/sw.ts`, `frontend/src/lib/push.ts`, `frontend/src/lib/browserNotify.tsx`, `frontend/src/components/SettingsModal.tsx`, `frontend/src/components/PushDeepLink.tsx` |
+| 36 | Per-group debt-reminder settings (owner-only): override overdue-days and reminder-interval per group; the env vars are the app-wide **defaults** + a floor (`REMINDER_INTERVAL_DAYS_MIN`); below-floor → 422 at the API, clamped up at scan time | §2.7, §2.9 (`PATCH /groups/{id}/settings`), `app/core/config.py`, `app/services/reminders.py` (`effective_thresholds`), `app/services/groups.py` (`update_settings`), `backend/migrations/versions/b8e2f6a4c9d1_*.py`, `frontend/src/components/GroupSettingsPanel.tsx` |
+| 37 | Group **Settings** tab (owner-only): rename, reminder settings, owner transfer, close/reopen (moved out of the header); owner transfer keeps the transferor a member and emits the `group.owner_changed` WS event | §2.9, §3.2, `app/services/groups.py` (`transfer_owner`, owner-only `rename_group`), `frontend/src/pages/GroupPage.tsx`, `frontend/src/components/GroupSettingsPanel.tsx`, `frontend/src/lib/notificationText.ts` |
 
 ## 7. Style
 

@@ -16,7 +16,14 @@ from app.core.security import get_current_user
 from app.models.group import Group
 from app.models.invitation import Invitation
 from app.models.user import User
-from app.schemas.groups import GroupCreate, GroupOut, GroupRename, MemberOut
+from app.schemas.groups import (
+    GroupCreate,
+    GroupOut,
+    GroupRename,
+    GroupSettingsUpdate,
+    MemberOut,
+    OwnerTransfer,
+)
 from app.schemas.invites import InviteCreate, InviteOut
 from app.schemas.user import avatar_url
 from app.services import balances as balances_service
@@ -62,11 +69,40 @@ async def get_group(
 @router.patch("/{group_id}", response_model=GroupOut)
 async def rename_group(
     body: GroupRename,
-    group: Group = Depends(get_group_member),
+    group: Group = Depends(get_group_owner),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GroupOut:
+    """Owner-only. Renames the group."""
     group = await groups_service.rename_group(db, group, user, body.name)
+    count, balance = await groups_service.group_with_count(db, group, user)
+    return build_group_out(group, count, balance)
+
+
+@router.patch("/{group_id}/settings", response_model=GroupOut)
+async def update_group_settings(
+    body: GroupSettingsUpdate,
+    group: Group = Depends(get_group_owner),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GroupOut:
+    """Owner-only. Updates the group's reminder settings (AGENTS.md §2.7)."""
+    group = await groups_service.update_settings(
+        db, group, user, body.debt_overdue_days, body.reminder_interval_days
+    )
+    count, balance = await groups_service.group_with_count(db, group, user)
+    return build_group_out(group, count, balance)
+
+
+@router.post("/{group_id}/transfer-owner", response_model=GroupOut)
+async def transfer_group_owner(
+    body: OwnerTransfer,
+    group: Group = Depends(get_group_owner),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GroupOut:
+    """Owner-only. Transfers the group to another current member."""
+    group = await groups_service.transfer_owner(db, group, user, body.user_id)
     count, balance = await groups_service.group_with_count(db, group, user)
     return build_group_out(group, count, balance)
 

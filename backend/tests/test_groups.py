@@ -12,6 +12,11 @@ And §2.13: the email-invite mail follows the recipient's preferred language
 (RU for an account holder who prefers Russian, EN fallback for an unknown
 address).
 
+And §2.7/§2.9: the owner-only group Settings (rename, reminder settings with
+the ``REMINDER_INTERVAL_DAYS_MIN`` floor, owner transfer) — permissions, the
+below-minimum 422, the feed row and the all-member bell on an ownership
+change.
+
 All scenarios run against the test DB (fresh schema per scenario).
 """
 
@@ -24,7 +29,8 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.core.errors import Conflict
+from app.core.errors import Conflict, Forbidden, ValidationFailed
+from app.models.activity import ActivityEvent
 from app.models.group import Group
 from app.models.invitation import Invitation
 from app.models.membership import Membership
@@ -36,7 +42,7 @@ from app.services import groups as groups_service
 from app.services import invites as invites_service
 from app.services import mail as mail_service
 
-ALICE, BOB = 1, 2
+ALICE, BOB, CAROL = 1, 2, 3
 GROUP_ID = 1
 TOKEN = "t0k3n-f0r-test-join"
 
@@ -373,6 +379,94 @@ async def _close_blocks_writes_and_reopen_restores(factory: async_sessionmaker) 
         mail_service.send_mail = original
 
 
+# --- owner-only settings & owner transfer (§2.7, §2.9) ----------------------
+
+
+async def _rename_group_owner_only(factory: async_sessionmaker) -> None:
+    await _mk_users(factory, (ALICE, BOB))
+    await _mk_group(factory, GROUP_ID, ALICE, (ALICE, BOB))
+    async with factory() as db:
+        group = await db.get(Group, GROUP_ID)
+        assert group is not None
+        # a non-owner rename is refused
+        with pytest.raises(Forbidden):
+            await groups_service.rename_group(db, group, await db.get(User, BOB), "New name")
+    async with factory() as db:
+        group = await db.get(Group, GROUP_ID)
+        assert group is not None
+        renamed = await groups_service.rename_group(
+            db, group, await db.get(User, ALICE), "New name"
+        )
+    assert renamed.name == "New name"
+
+
+async def _update_settings_owner_only_and_floor(factory: async_sessionmaker) -> None:
+    await _mk_users(factory, (ALICE, BOB))
+    await _mk_group(factory, GROUP_ID, ALICE, (ALICE, BOB))
+    async with factory() as db:
+        group = await db.get(Group, GROUP_ID)
+        assert group is not None
+        # a non-owner cannot touch the settings
+        with pytest.raises(Forbidden):
+            await groups_service.update_settings(db, group, await db.get(User, BOB), 7, 7)
+        # an interval below the env floor is a validation error (422)
+        with pytest.raises(ValidationFailed):
+            await groups_service.update_settings(db, group, await db.get(User, ALICE), 7, 1)
+        # a valid update is persisted
+        updated = await groups_service.update_settings(
+            db, group, await db.get(User, ALICE), 3, 10
+        )
+    assert updated.debt_overdue_days == 3
+    assert updated.reminder_interval_days == 10
+    # null clears both overrides back to the app-wide defaults
+    async with factory() as db:
+        group = await db.get(Group, GROUP_ID)
+        assert group is not None
+        cleared = await groups_service.update_settings(
+            db, group, await db.get(User, ALICE), None, None
+        )
+    assert cleared.debt_overdue_days is None
+    assert cleared.reminder_interval_days is None
+
+
+async def _transfer_owner_lifecycle(factory: async_sessionmaker) -> None:
+    await _mk_users(factory, (ALICE, BOB, CAROL))
+    await _mk_group(factory, GROUP_ID, ALICE, (ALICE, BOB, CAROL))
+    async with factory() as db:
+        group = await db.get(Group, GROUP_ID)
+        assert group is not None
+        # a non-owner cannot transfer
+        with pytest.raises(Forbidden):
+            await groups_service.transfer_owner(db, group, await db.get(User, BOB), CAROL)
+        # the target must be a current member
+        with pytest.raises(Conflict):
+            await groups_service.transfer_owner(db, group, await db.get(User, ALICE), 999)
+        # transferring to oneself is refused
+        with pytest.raises(Conflict):
+            await groups_service.transfer_owner(db, group, await db.get(User, ALICE), ALICE)
+    async with factory() as db:
+        group = await db.get(Group, GROUP_ID)
+        assert group is not None
+        transferred = await groups_service.transfer_owner(db, group, await db.get(User, ALICE), BOB)
+    assert transferred.created_by == BOB
+    # a feed row and a bell for every member (the transferor included)
+    async with factory() as db:
+        feed_types = (
+            await db.execute(
+                select(ActivityEvent.type).where(ActivityEvent.group_id == GROUP_ID)
+            )
+        ).scalars().all()
+        bell = (
+            await db.execute(
+                select(Notification.user_id)
+                .where(Notification.type == "group.owner_changed")
+                .order_by(Notification.user_id)
+            )
+        ).scalars().all()
+    assert "group.owner_changed" in feed_types
+    assert bell == [ALICE, BOB, CAROL]
+
+
 # --- entry points ------------------------------------------------------------
 
 
@@ -406,3 +500,15 @@ def test_close_blocks_writes_and_reopen_restores(run_db) -> None:
 
 def test_email_invite_mail_follows_recipient_language(run_db) -> None:
     run_db(_email_invite_mail_follows_recipient_language)
+
+
+def test_rename_group_owner_only(run_db) -> None:
+    run_db(_rename_group_owner_only)
+
+
+def test_update_settings_owner_only_and_floor(run_db) -> None:
+    run_db(_update_settings_owner_only_and_floor)
+
+
+def test_transfer_owner_lifecycle(run_db) -> None:
+    run_db(_transfer_owner_lifecycle)

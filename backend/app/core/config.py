@@ -82,9 +82,13 @@ class Settings(BaseSettings):
     max_avatar_mb: int = 2
     frontend_url: str = "http://localhost:8081"
 
-    # --- Debt reminders ---
-    debt_overdue_days: int = 7
-    reminder_interval_days: int = 7
+    # --- Debt reminders (AGENTS.md §2.7) ---
+    # App-wide defaults; every group may override both from its Settings tab.
+    debt_overdue_days_default: int = 7
+    reminder_interval_days_default: int = 7
+    # Hard floor for the reminder interval: a group's interval can be lowered
+    # to this value at most, never below it (422 otherwise).
+    reminder_interval_days_min: int = 7
 
     # --- Invites ---
     invite_expiry_days: int = 7

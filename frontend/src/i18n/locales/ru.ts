@@ -86,7 +86,7 @@ export const ru: Dict = {
   'group.reopenError': 'Не удалось открыть группу',
   'group.closedBanner':
     'Группа закрыта: новые расходы добавлять нельзя. Переводы, приглашения и просмотр по-прежнему работают.',
-  'group.closedBannerOwner': 'Вы можете открыть её кнопкой выше.',
+  'group.closedBannerOwner': 'Вы можете открыть её на вкладке «Настройки».',
   'group.closedBannerOther': 'Открыть может только владелец.',
   'group.closeModalTitle': 'Закрыть группу',
   'group.closeModalQ': 'Закрыть {{name}}?',
@@ -96,6 +96,22 @@ export const ru: Dict = {
   'group.reopenModalQ': 'Открыть «{{name}}»?',
   'group.reopenModalBody': 'Снова можно будет добавлять расходы.',
 
+  // --- Настройки группы (только владелец, §2.7) ---------------------------------------------
+  'settings.nameLabel': 'Название группы',
+  'settings.rename': 'Переименовать',
+  'settings.remindersTitle': 'Напоминания о долгах',
+  'settings.overdueLabel': 'Сколько дней долг считается просроченным',
+  'settings.overdueHint': 'Пусто — стандарт приложения ({{days}} дн.).',
+  'settings.intervalLabel': 'Сколько дней между повторными напоминаниями',
+  'settings.intervalHint': 'Пусто — стандарт приложения ({{days}} дн.); минимум {{min}}.',
+  'settings.ownerTitle': 'Владелец',
+  'settings.ownerSelect': 'Выберите нового владельца…',
+  'settings.ownerHint': 'Новый владелец получает права владельца (настройки, переименование, закрытие). Вы останетесь в группе участником.',
+  'settings.transfer': 'Передать права владельца',
+  'settings.transferModalTitle': 'Передать права владельца?',
+  'settings.transferModalBody': '{{name}} станет владельцем этой группы. Вы останетесь в группе обычным участником.',
+  'settings.lifespanTitle': 'Группа',
+
   // --- Вкладки группы ----------------------------------------------------------------------
   'tab.expenses': 'Расходы',
   'tab.balances': 'Балансы',
@@ -103,6 +119,7 @@ export const ru: Dict = {
   'tab.activity': 'Активность',
   'tab.invites': 'Приглашения',
   'tab.people': 'Люди',
+  'tab.settings': 'Настройки',
 
   // --- Обзор -------------------------------------------------------------------------------
   'overview.title': 'Обзор',
@@ -279,6 +296,7 @@ export const ru: Dict = {
   'feed.memberLeft': '{{actor}} покинул(а) группу',
   'feed.groupClosed': '{{actor}} закрыл(а) группу',
   'feed.groupReopened': '{{actor}} открыл(а) группу',
+  'feed.ownerChanged': '{{actor}} передал(а) права владельца — теперь {{name}}',
   'feed.groupCreated': '{{actor}} создал(а) группу «{{name}}»',
 
   // --- Колокольчик уведомлений ---------------------------------------------------------------------------------
@@ -304,6 +322,7 @@ export const ru: Dict = {
   'notif.view': 'Просмотреть',
   'notif.groupClosed': 'Группа была закрыта',
   'notif.groupReopened': 'Группа была открыта снова',
+  'notif.ownerChanged': 'Теперь владелец группы — {{name}}',
   'notif.appTitle': 'EasyMoney',
 
   // --- Чеки ----------------------------------------------------------------------------------------------------------
