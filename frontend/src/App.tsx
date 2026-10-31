@@ -3,7 +3,8 @@
  * authenticated shell (Layout) for the group app.
  *
  * Guards:
- *  - RequireAuth     — bounce unauthenticated visitors to /login.
+ *  - RequireAuth     — bounce unauthenticated visitors to /login, including
+ *                       reactively when the session ends during /me bootstrap.
  *  - RedirectIfAuthed — bounce signed-in users away from the auth pages.
  *  - RequireVerified — while /me is pending, show a spinner; a not-yet-verified
  *                       account (register confirmation on, §2.13) sees the
@@ -11,10 +12,10 @@
  *  - RequireAdmin    — the /admin route is only reachable for is_admin users.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 
-import { getTokens } from './api/client'
+import { AUTH_EXPIRED_EVENT, getTokens } from './api/client'
 import { Layout } from './components/Layout'
 import { PushDeepLink } from './components/PushDeepLink'
 import { VerifyEmailGate } from './components/VerifyEmailGate'
@@ -30,9 +31,37 @@ import { GroupPage } from './pages/GroupPage'
 import { InvitePage } from './pages/InvitePage'
 import { OverviewPage } from './pages/OverviewPage'
 
+/**
+ * Session presence as reactive state.
+ *
+ * `getTokens()` is an imperative read: stale-but-present tokens let a visitor
+ * through at mount, and when they turn out to be invalid during the /me
+ * bootstrap (401 → refresh → 401 → clearTokens + AUTH_EXPIRED_EVENT) nothing
+ * in the route tree re-renders. Worse, the removeQueries() that listens to
+ * the same event (queries.ts) wipes the me query's error state, so the
+ * already-mounted useMe observer is left pending forever and RequireVerified
+ * spins on "Loading…" until the user refreshes manually. Re-reading the
+ * tokens on the session-end events — AUTH_EXPIRED_EVENT in this tab, the
+ * `storage` event for a logout in another tab — makes the bounce to /login
+ * reactive instead of mount-time-only.
+ */
+function useAuthed(): boolean {
+  const [authed, setAuthed] = useState(() => !!getTokens())
+  useEffect(() => {
+    const sync = () => setAuthed(!!getTokens())
+    window.addEventListener(AUTH_EXPIRED_EVENT, sync)
+    window.addEventListener('storage', sync)
+    return () => {
+      window.removeEventListener(AUTH_EXPIRED_EVENT, sync)
+      window.removeEventListener('storage', sync)
+    }
+  }, [])
+  return authed
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const location = useLocation()
-  if (!getTokens()) {
+  if (!useAuthed()) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
   return <>{children}</>
